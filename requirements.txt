@@ -1,0 +1,11 @@
+ttkbootstrap
+PyGetWindow
+keyboard
+pillow
+pyautogui
+pytesseract
+pystray
+psutil
+pywin32
+autoit
+requests 
