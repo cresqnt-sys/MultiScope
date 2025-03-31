@@ -6,6 +6,7 @@ A hard-fork of Noteab's Noteab Macro.
 
 ## 🌟 Features
 
+- AFK WITHOUT ROBLOX BEING IN FOCUS!!!!
 - Multi Account Support
 - Multi Webhook Support
 - Better Error Handling
