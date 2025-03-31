@@ -18,6 +18,7 @@ A hard-fork of Noteab's Noteab Macro.
 ### Prerequisites
 - Python
 - Git (for cloning the repository)
+- Fishstrap
 
 ### Installation
 
