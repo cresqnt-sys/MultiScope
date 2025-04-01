@@ -2,6 +2,13 @@ import json, requests, time, os, threading, re, webbrowser, random, keyboard, py
 import traceback
 import pygetwindow as gw
 import tkinter as tk
+import ctypes
+import sys
+
+# Fix for taskbar icon - set AppUserModelID
+if hasattr(sys, 'frozen'):  # Running as compiled
+    myappid = 'BiomeScope.App.1.0.1.Beta'
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
 
 try:
 
@@ -78,7 +85,7 @@ class BiomePresence():
         except locale.Error:
             locale.setlocale(locale.LC_ALL, '')
 
-        self.version = "1.0.0-Beta"
+        self.version = "1.0.1-Beta"
 
         self.logs_dir = os.path.join(os.getenv('LOCALAPPDATA'), 'Roblox', 'logs')
 
@@ -414,21 +421,27 @@ class BiomePresence():
             self.error_logging(e, "Error at importing config.json")
 
     def init_gui(self):
-        selected_theme = "darkly"  
-        abslt_path = os.path.dirname(os.path.abspath(__file__))
-        icon_path = os.path.join(abslt_path, "NoteabBiomeTracker.ico")
-
+        """Initialize GUI elements"""
+        selected_theme = self.config.get("selected_theme", "darkly")
         self.root = ttk.Window(themename=selected_theme)
-        self.root.title("BiomeScope | Version 1.0.0-Beta (Idle)")
+        
+        # Set window icon explicitly
+        if hasattr(sys, '_MEIPASS'):
+            # Running as compiled exe
+            bundle_dir = sys._MEIPASS
+            icon_path = os.path.join(bundle_dir, 'biomescope.ico')
+        else:
+            # Running as script
+            icon_path = 'biomescope.ico'
+            
+        if os.path.exists(icon_path):
+            self.root.iconbitmap(icon_path)
+            
+        self.root.title(f"BiomeScope | Version {self.version}")
         self.root.geometry("695x450")  
         self.root.resizable(False, False)  
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
-
-        try:
-            self.root.iconbitmap(icon_path)
-        except Exception as e:
-            pass
 
         self.variables = {biome: ttk.StringVar(master=self.root, value=self.config.get("biome_notifier", {}).get(biome, "Message"))
                         for biome in self.biome_data}
@@ -1387,7 +1400,7 @@ class BiomePresence():
         biome_info = self.biome_data[biome]
         biome_color = int(biome_info["color"], 16)
         timestamp = time.strftime("[%H:%M:%S]") 
-        icon_url = "https://i.postimg.cc/rsXpGncL/Noteab-Biome-Tracker.png"
+        icon_url = "https://i.postimg.cc/mDzwFfX1/GLITCHED.png"
 
         content = ""
 
@@ -1482,7 +1495,7 @@ class BiomePresence():
                 "color": 0x00FF00,  
                 "footer": {
                     "text": f"BiomeScope | Version {self.version}",
-                    "icon_url": "https://i.postimg.cc/rsXpGncL/Noteab-Biome-Tracker.png"
+                    "icon_url": "https://i.postimg.cc/mDzwFfX1/GLITCHED.png"
                 },
                 "timestamp": None
             }
@@ -1916,7 +1929,7 @@ class BiomePresence():
             color = 0x00FF00  
 
         timestamp = time.strftime("[%H:%M:%S]")
-        icon_url = "https://i.postimg.cc/rsXpGncL/Noteab-Biome-Tracker.png"
+        icon_url = "https://i.postimg.cc/mDzwFfX1/GLITCHED.png"
 
         title = f"📊 Status Update"
         description = f"## {timestamp} {status}\n"
@@ -2004,7 +2017,7 @@ class BiomePresence():
         timestamp_full = f"<t:{unix_timestamp}:F>"  
         timestamp_relative = f"<t:{unix_timestamp}:R>"  
 
-        icon_url = "https://i.postimg.cc/rsXpGncL/Noteab-Biome-Tracker.png"
+        icon_url = "https://i.postimg.cc/mDzwFfX1/GLITCHED.png"
 
         ps_link = self.get_ps_link_for_user(username)
 
@@ -2066,7 +2079,7 @@ class BiomePresence():
 
         embed["author"] = {
             "name": "Biome Update",
-            "icon_url": "https://i.postimg.cc/rsXpGncL/Noteab-Biome-Tracker.png"
+            "icon_url": "https://i.postimg.cc/mDzwFfX1/GLITCHED.png"
         }
 
         webhook_success = False
@@ -2141,7 +2154,7 @@ class BiomePresence():
         if not hasattr(self, 'logs'):
             self.logs = []
 
-        self.root.title("BiomeScope | Version 1.0.0-Beta (Running)")
+        self.root.title("BiomeScope | Version 1.0.1-Beta (Running)")
 
         self.detection_thread = threading.Thread(target=self.multi_account_biome_loop, daemon=True)
         self.detection_thread.start()
@@ -2167,7 +2180,7 @@ class BiomePresence():
 
         self.save_config()
 
-        self.root.title("BiomeScope | Version 1.0.0-Beta (Stopped)")
+        self.root.title("BiomeScope | Version 1.0.1-Beta (Stopped)")
 
         self.send_webhook_status("Biome Detection Stopped", 0xFF0000)  
 

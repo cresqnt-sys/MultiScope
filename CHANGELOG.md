@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1-Beta] - 2025-04-01
+
+### Fixed
+- Anti-AFK system now properly detects user inactivity
+- True-AFK mode correctly performs actions when user is inactive
+- Improved action scheduling based on activity state
+- Fixed overdue actions not being performed when user is inactive
+- Reduced log spam for repeated status messages
+- Added exe icons
+
 ## [1.0.0-Beta] - 2025-03-31
 
 ### Added
@@ -34,5 +44,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Session time tracking bugs
 - UI responsiveness in high DPI displays
 
-[Unreleased]: https://github.com/cresqnt-sys/BiomeScope/compare/v1.0.0-Beta...HEAD
+[Unreleased]: https://github.com/cresqnt-sys/BiomeScope/compare/v1.0.1-Beta...HEAD
+[1.0.1-Beta]: https://github.com/cresqnt-sys/BiomeScope/compare/v1.0.0-Beta...v1.0.1-Beta
 [1.0.0-Beta]: https://github.com/cresqnt-sys/BiomeScope/releases/tag/v1.0.0-Beta 

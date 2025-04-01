@@ -2,7 +2,7 @@
 
 A hard-fork of Noteab's Noteab Macro.
 
-**Current Version: 1.0.0-Beta**
+**Current Version: 1.0.1-Beta**
 
 ## 🌟 Features
 
@@ -17,6 +17,7 @@ A hard-fork of Noteab's Noteab Macro.
 ## 🚀 Getting Started
 
 ### Prerequisites
+OR JUST USE THE EXE FILE IN RELEASES!!!
 - Python
 - Git (for cloning the repository)
 - Bloxstrap (RPC REQUIRED | Multi-Instance Optional)
