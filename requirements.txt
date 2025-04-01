@@ -8,4 +8,5 @@ pystray
 psutil
 pywin32
 autoit
+pyautoit
 requests 
