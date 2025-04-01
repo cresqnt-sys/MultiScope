@@ -53,4 +53,4 @@ This project is licensed under the Apache-2.0 License - see the [LICENSE](LICENS
 If you encounter any issues or have questions, please:
 1. Check the [Issues](https://github.com/cresqnt-sys/BiomeScope/issues) page
 2. Create a new issue if your problem isn't already listed
-3. Discord support server comming soon.
+3. Discord support server coming soon.
