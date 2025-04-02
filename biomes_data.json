@@ -38,5 +38,9 @@
     "DREAMSPACE": {
         "color": "0xea9dda",
         "thumbnail_url": "https://i.postimg.cc/rFjCcW3w/image.png"
+    },
+    "NORMAL": {
+        "color": "0x00ff00",
+        "thumbnail_url": "https://static.wikia.nocookie.net/sol-rng/images/c/c9/Daytime_img.png/revision/latest/scale-to-width-down/1000?cb=20241116044859"
     }
 }

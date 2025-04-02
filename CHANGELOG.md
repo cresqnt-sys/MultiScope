@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1-Hotfix] - 2025-04-01
+
+### Fixed
+- Added @everyone ping for Glitch and Dreamscape biome notifications
+
 ## [1.0.1-Beta] - 2025-04-01
 
 ### Fixed

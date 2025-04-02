@@ -7,7 +7,7 @@ import sys
 
 # Fix for taskbar icon - set AppUserModelID
 if hasattr(sys, 'frozen'):  # Running as compiled
-    myappid = 'BiomeScope.App.1.0.1.Beta'
+    myappid = 'BiomeScope.App.1.0.1.Hotfix'
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
 
 try:
@@ -85,7 +85,7 @@ class BiomePresence():
         except locale.Error:
             locale.setlocale(locale.LC_ALL, '')
 
-        self.version = "1.0.1-Beta"
+        self.version = "1.0.1-Hotfix"
 
         self.logs_dir = os.path.join(os.getenv('LOCALAPPDATA'), 'Roblox', 'logs')
 
@@ -1784,7 +1784,7 @@ class BiomePresence():
                             self.append_log(f"Sending end webhook for {username}'s previous biome: {previous_biome}")
                             self.send_account_webhook(username, previous_biome, prev_message_type, "end")
 
-                    if message_type != "None" and biome != "Normal":
+                    if message_type != "None" and biome != "NORMAL":
                         self.append_log(f"Sending start webhook for {username}'s biome: {biome}")
                         self.send_account_webhook(username, biome, message_type, "start")
 
@@ -2023,12 +2023,13 @@ class BiomePresence():
 
         content = ""
         if event_type == "start":
-            if ps_link:
-                content = f"**Private Server Link:** {ps_link}"
-            else:
-                content = "**No Private Server Link Provided**"
-
             if biome in ["GLITCHED", "DREAMSPACE"]:
+                content = "@everyone"
+                if ps_link:
+                    content += f"\n**Private Server Link:** {ps_link}"
+                else:
+                    content += "\n**No Private Server Link Provided**"
+            else:
                 user_id = self.config.get(f"{biome}ID", "")
                 if not user_id:
                     user_id = self.config.get("UserID", "")
@@ -2154,7 +2155,7 @@ class BiomePresence():
         if not hasattr(self, 'logs'):
             self.logs = []
 
-        self.root.title("BiomeScope | Version 1.0.1-Beta (Running)")
+        self.root.title("BiomeScope | Version 1.0.1-Hotfix (Running)")
 
         self.detection_thread = threading.Thread(target=self.multi_account_biome_loop, daemon=True)
         self.detection_thread.start()
@@ -2180,7 +2181,7 @@ class BiomePresence():
 
         self.save_config()
 
-        self.root.title("BiomeScope | Version 1.0.1-Beta (Stopped)")
+        self.root.title("BiomeScope | Version 1.0.1-Hotfix (Stopped)")
 
         self.send_webhook_status("Biome Detection Stopped", 0xFF0000)  
 
