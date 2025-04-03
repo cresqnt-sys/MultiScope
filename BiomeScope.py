@@ -7,7 +7,7 @@ import sys
 
 # Fix for taskbar icon - set AppUserModelID
 if hasattr(sys, 'frozen'):  # Running as compiled
-    myappid = 'BiomeScope.App.1.0.1.Hotfix'
+    myappid = 'BiomeScope.App.1.0.2.Beta'
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
 
 try:
@@ -85,7 +85,7 @@ class BiomePresence():
         except locale.Error:
             locale.setlocale(locale.LC_ALL, '')
 
-        self.version = "1.0.1-Hotfix"
+        self.version = "1.0.2-Beta"
 
         self.logs_dir = os.path.join(os.getenv('LOCALAPPDATA'), 'Roblox', 'logs')
 
@@ -152,6 +152,228 @@ class BiomePresence():
         self.init_gui()
 
         self.last_aura_found = None
+        
+    def check_all_accounts_biomes_at_once(self):
+        """Check for biomes in all log files for all accounts simultaneously"""
+        try:
+            if not hasattr(self, 'accounts') or not self.accounts:
+                self.accounts = self.config.get("accounts", [])
+                self.append_log(f"Loading accounts in check_all_accounts_biomes_at_once: {len(self.accounts)} accounts found")
+                if not self.accounts:
+                    return
+
+            # Initialize dictionaries if they don't exist
+            if not hasattr(self, 'account_biomes'):
+                self.account_biomes = {}
+                
+            if not hasattr(self, 'account_last_positions'):
+                self.account_last_positions = {}
+                
+            if not hasattr(self, 'account_last_sent'):
+                self.account_last_sent = {}
+                
+            if not hasattr(self, 'username_log_cache'):
+                self.username_log_cache = {}
+
+            # Get all log files at once
+            all_log_files = self.get_log_files()
+            if not all_log_files:
+                self.append_log("No log files found to check")
+                return
+
+            # If username_log_cache doesn't have entries for all accounts, populate it
+            log_files_to_check = {}
+            new_assignments = 0
+            
+            # First pass - use existing assignments
+            for account in self.accounts:
+                username = account.get("username")
+                if not username:
+                    continue
+                    
+                # Use cached assignment if available
+                if username in self.username_log_cache and self.username_log_cache[username] in all_log_files:
+                    log_files_to_check[username] = self.username_log_cache[username]
+                    
+            # Second pass - assign unassigned accounts to log files
+            unassigned_accounts = [account.get("username") for account in self.accounts 
+                                  if account.get("username") and account.get("username") not in log_files_to_check]
+            
+            if unassigned_accounts:
+                # Find log files not yet assigned
+                assigned_log_files = set(log_files_to_check.values())
+                available_log_files = [f for f in all_log_files if f not in assigned_log_files]
+                
+                if available_log_files:
+                    # Try to find matching log files for each unassigned account
+                    for username in unassigned_accounts:
+                        if not available_log_files:
+                            break  # No more available files
+                            
+                        # Try to find a log file containing the username
+                        username_patterns = [
+                            username,
+                            f'"{username}"', 
+                            f"'{username}'", 
+                            f">{username}<",
+                            f'DisplayName":"{username}"',
+                            f'displayName":"{username}"',
+                            f'Username":"{username}"',
+                            f'username":"{username}"',
+                            f'Name":"{username}"',
+                            f'name":"{username}"',
+                            f'Player.Name = "{username}"',
+                            f'Player.Name="{username}"',
+                            f'PlayerName="{username}"',
+                            f'PlayerName = "{username}"'
+                        ]
+                        
+                        found_match = False
+                        for file_path in available_log_files[:]:  # Copy the list to modify while iterating
+                            try:
+                                with open(file_path, 'r', encoding='utf-8', errors='ignore') as file:
+                                    content = file.read(50000)  # Read first 50KB
+                                    if any(pattern in content for pattern in username_patterns):
+                                        log_files_to_check[username] = file_path
+                                        self.username_log_cache[username] = file_path
+                                        available_log_files.remove(file_path)
+                                        new_assignments += 1
+                                        found_match = True
+                                        break
+                            except Exception as e:
+                                self.error_logging(e, f"Error reading log file for username matching: {file_path}")
+                                continue
+                        
+                        # If no match found, assign an available file
+                        if not found_match and available_log_files:
+                            log_files_to_check[username] = available_log_files[0]
+                            self.username_log_cache[username] = available_log_files[0]
+                            available_log_files.pop(0)
+                            new_assignments += 1
+                            
+                # If still unassigned accounts but no available files, just use oldest assigned file
+                if new_assignments > 0:
+                    self.append_log(f"Assigned {new_assignments} new log files to accounts")
+
+            # Check all log files in parallel
+            detected_biomes = {}
+            
+            # Process each account's log file
+            for username, log_file_path in log_files_to_check.items():
+                if not os.path.exists(log_file_path):
+                    continue
+                    
+                file_size = os.path.getsize(log_file_path)
+                if file_size == 0:
+                    continue
+                    
+                # Initialize last position if needed
+                if username not in self.account_last_positions:
+                    self.account_last_positions[username] = max(0, file_size - 5000)
+                
+                current_position = self.account_last_positions.get(username, 0)
+                
+                # Read new content since last check
+                try:
+                    with open(log_file_path, 'r', encoding='utf-8', errors='ignore') as file:
+                        if current_position > file_size:
+                            # Log file was truncated or rotated
+                            current_position = max(0, file_size - 5000)
+                            
+                        file.seek(current_position)
+                        
+                        # Limit the maximum amount of new data to read
+                        max_new_data = 50000  # Maximum 50KB of new data per check
+                        if file.tell() + max_new_data < file_size:
+                            lines = file.readlines(max_new_data)
+                            self.account_last_positions[username] = file.tell()
+                        else:
+                            lines = file.readlines()
+                            self.account_last_positions[username] = file.tell()
+                        
+                    # Process lines for biome detection
+                    if lines:
+                        account_detected_biomes = set()
+                        
+                        for line in lines:
+                            line_upper = line.upper()
+                            
+                            # Check RPC messages first
+                            if "[BloxstrapRPC]" in line:
+                                biome = self.get_biome_from_rpc(line)
+                                if biome and biome not in account_detected_biomes:
+                                    account_detected_biomes.add(biome)
+                                    continue
+                            
+                            # Check for various biome patterns
+                            for biome in self.biome_data:
+                                if biome in account_detected_biomes:
+                                    continue
+                                    
+                                biome_upper = biome.upper()
+                                
+                                # Check specific patterns
+                                if biome_upper in line_upper and any([
+                                    f"BIOME: {biome_upper}" in line_upper,
+                                    f"BIOME {biome_upper}" in line_upper,
+                                    f"ENTERED {biome_upper}" in line_upper,
+                                    f"BIOME:{biome_upper}" in line_upper,
+                                    f"CURRENT BIOME: {biome_upper}" in line_upper,
+                                    f"CURRENT BIOME {biome_upper}" in line_upper,
+                                    f"BIOME CHANGED TO {biome_upper}" in line_upper,
+                                    f"BIOME CHANGED: {biome_upper}" in line_upper,
+                                    f"BIOME TYPE: {biome_upper}" in line_upper,
+                                    f"BIOME TYPE {biome_upper}" in line_upper,
+                                    f"ENVIRONMENT: {biome_upper}" in line_upper,
+                                    f"ENVIRONMENT {biome_upper}" in line_upper
+                                ]):
+                                    account_detected_biomes.add(biome)
+                                    break
+                                    
+                                # Check quoted patterns
+                                if biome in account_detected_biomes:
+                                    continue
+                                    
+                                if any([
+                                    f'"{biome_upper}"' in line_upper,
+                                    f"'{biome_upper}'" in line_upper,
+                                    f"[{biome_upper}]" in line_upper,
+                                    f"({biome_upper})" in line_upper,
+                                    f"<{biome_upper}>" in line_upper,
+                                    f"«{biome_upper}»" in line_upper
+                                ]):
+                                    account_detected_biomes.add(biome)
+                                    break
+                                    
+                                # Check word boundary patterns
+                                if biome in account_detected_biomes:
+                                    continue
+                                    
+                                if (f" {biome_upper} " in line_upper or 
+                                    line_upper.startswith(f"{biome_upper} ") or 
+                                    line_upper.endswith(f" {biome_upper}") or
+                                    line_upper == biome_upper):
+                                    account_detected_biomes.add(biome)
+                        
+                        # Store detected biomes for this account
+                        if account_detected_biomes:
+                            detected_biomes[username] = account_detected_biomes
+                            
+                except Exception as e:
+                    error_msg = f"Error processing log file for {username}: {str(e)}"
+                    self.append_log(error_msg)
+                    self.error_logging(e, error_msg)
+            
+            # After processing all logs, handle biome detections
+            if detected_biomes:
+                for username, biomes in detected_biomes.items():
+                    for biome in biomes:
+                        self.handle_account_biome_detection(username, biome)
+            
+        except Exception as e:
+            error_msg = f"Error in check_all_accounts_biomes_at_once: {str(e)}"
+            self.append_log(error_msg)
+            self.error_logging(e, error_msg)
 
     def parse_session_time(self, session_time_str):
         """Parse session time from string format to seconds"""
@@ -312,9 +534,16 @@ class BiomePresence():
         if hasattr(self, 'webhook_entries'):
             webhooks = []
             for entry in self.webhook_entries:
-                url = entry.get().strip()
+                url = entry["url_entry"].get().strip()
                 if url:  
-                    webhooks.append({"url": url, "user_id": ""})
+                    webhook_data = {
+                        "url": url, 
+                        "user_id": ""
+                    }
+                    # Only add account_notifications if not notifying all accounts
+                    if not entry["notify_all_accounts"].get() and entry["account_notifications"]:
+                        webhook_data["account_notifications"] = entry["account_notifications"]
+                    webhooks.append(webhook_data)
             config["webhooks"] = webhooks
 
         if hasattr(self, 'variables'):
@@ -425,21 +654,9 @@ class BiomePresence():
         selected_theme = self.config.get("selected_theme", "darkly")
         self.root = ttk.Window(themename=selected_theme)
         
-        # Set window icon explicitly
-        if hasattr(sys, '_MEIPASS'):
-            # Running as compiled exe
-            bundle_dir = sys._MEIPASS
-            icon_path = os.path.join(bundle_dir, 'biomescope.ico')
-        else:
-            # Running as script
-            icon_path = 'biomescope.ico'
-            
-        if os.path.exists(icon_path):
-            self.root.iconbitmap(icon_path)
-            
         self.root.title(f"BiomeScope | Version {self.version}")
-        self.root.geometry("695x450")  
-        self.root.resizable(False, False)  
+        self.root.geometry("735x500")  
+        self.root.resizable(True, True)  
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
 
@@ -660,186 +877,393 @@ class BiomePresence():
         pass
 
     def create_webhook_tab(self, frame):
+        """Create a tab for webhook configuration with account notification settings"""
+        # Create a master frame that will contain everything and handle layout
+        master_frame = ttk.Frame(frame)
+        master_frame.pack(fill="both", expand=True)
+        
+        # Create top section (fixed, not scrollable)
+        top_frame = ttk.Frame(master_frame)
+        top_frame.pack(fill="x", side="top", padx=10, pady=5)
+        
+        # Header
+        webhook_label = ttk.Label(top_frame, text="Discord Webhooks", font=("Arial", 11, "bold"))
+        webhook_label.pack(side="left", anchor='w', padx=5)
 
-        webhook_frame = ttk.Frame(frame)
-        webhook_frame.pack(fill='both', expand=True, padx=5, pady=5)
-
-        webhook_label = ttk.Label(webhook_frame, text="Discord Webhooks")
-        webhook_label.pack(anchor='w', padx=5, pady=(5, 0))
-
-        help_text = ttk.Label(webhook_frame, 
-                              text="Add Discord webhook URLs to receive notifications about biomes, auras, and merchants.",
-                              wraplength=650)
-        help_text.pack(fill='x', padx=5, pady=(0, 5))
-
-        accounts_btn_frame = ttk.Frame(webhook_frame)
-        accounts_btn_frame.pack(fill='x', padx=5, pady=(0, 10))
-
+        # Account manager button
         manage_accounts_btn = ttk.Button(
-            accounts_btn_frame,
+            top_frame,
             text="Manage Accounts",
-            command=self.open_accounts_manager
+            command=self.open_accounts_manager,
+            style="secondary.TButton",
+            width=15
         )
-        manage_accounts_btn.pack(side='left', padx=(0, 5))
-
-        account_note = ttk.Label(webhook_frame,
-                               text="Use the Manage Accounts button to configure private server links and multiple accounts.",
-                               wraplength=650,
-                               foreground="#666666",
-                               font=("Arial", 9, "italic"))
-        account_note.pack(fill='x', padx=5, pady=(0, 10))
-
-        content_area = ttk.Frame(webhook_frame)
-        content_area.pack(fill='both', expand=True)
-
-        container_frame = ttk.Frame(content_area)
-        container_frame.pack(fill='both', expand=True, padx=5, pady=2)
-
-        canvas = tk.Canvas(container_frame, highlightthickness=0, 
-                          bg=ttk.Style().lookup('TFrame', 'background'),
-                          height=180)  
-
-        scrollbar = ttk.Scrollbar(container_frame, orient="vertical", command=canvas.yview)
-
-        self.webhook_content_frame = ttk.Frame(canvas)
-
-        def update_scroll_region(event=None):
-            bbox = canvas.bbox("all")
-            if bbox:
-                width = bbox[2] - bbox[0]
-                height = bbox[3] - bbox[1]
-
-                if height > canvas.winfo_height():
-                    canvas.configure(scrollregion=bbox)
-                else:
-
-                    canvas.configure(scrollregion=(0, 0, width, canvas.winfo_height()))
-
-        self.webhook_content_frame.bind("<Configure>", update_scroll_region)
-
-        canvas.create_window((0, 0), window=self.webhook_content_frame, anchor="nw", width=670)
-        canvas.configure(yscrollcommand=scrollbar.set)
-
-        def _on_mousewheel(event):
-
-            if canvas.bbox("all") and (canvas.bbox("all")[3] - canvas.bbox("all")[1]) > canvas.winfo_height():
-                canvas.yview_scroll(int(-1*(event.delta/120)), "units")
-
-        canvas.bind("<MouseWheel>", _on_mousewheel)
-
-        frame.bind("<Unmap>", lambda e: canvas.unbind_all("<MouseWheel>"))
-
+        manage_accounts_btn.pack(side="right", padx=5)
+        
+        # Help text
+        help_frame = ttk.Frame(master_frame)
+        help_frame.pack(fill="x", side="top", padx=10, pady=5)
+        
+        help_text = ttk.Label(help_frame, 
+                             text="Add Discord webhook URLs to receive notifications about biomes, auras, and merchants.",
+                             wraplength=700)
+        help_text.pack(fill='x', padx=5)
+        
+        # Add webhook button
+        button_frame = ttk.Frame(master_frame)
+        button_frame.pack(fill="x", side="top", padx=10, pady=5)
+        
+        add_webhook_btn = ttk.Button(button_frame, text="Add Webhook", 
+                                   command=lambda: add_webhook_entry(),
+                                   style="info.TButton",
+                                   width=15)
+        add_webhook_btn.pack(side="left", padx=5)
+        
+        # Create center section (scrollable content)
+        center_frame = ttk.Frame(master_frame)
+        center_frame.pack(fill="both", expand=True, side="top", padx=10, pady=5)
+        
+        # Create canvas for scrolling
+        canvas = tk.Canvas(center_frame, highlightthickness=0, 
+                          bg=ttk.Style().lookup('TFrame', 'background'))
+        
+        # Add scrollbar
+        scrollbar = ttk.Scrollbar(center_frame, orient="vertical", command=canvas.yview)
+        
+        # Position canvas and scrollbar
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
+        
+        # Configure canvas
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # Create frame inside canvas for content
+        self.webhook_content_frame = ttk.Frame(canvas)
+        
+        # Bind canvas and frame for scrolling
+        def update_scroll_region(event=None):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+            
+        self.webhook_content_frame.bind("<Configure>", update_scroll_region)
+        
+        # Create window in canvas
+        canvas.create_window((0, 0), window=self.webhook_content_frame, anchor="nw", width=670)
+        
+        # Add mouse wheel scrolling
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+            
+        canvas.bind("<MouseWheel>", _on_mousewheel)
+        frame.bind("<Unmap>", lambda e: canvas.unbind_all("<MouseWheel>"))
+        
+        # Create bottom section (fixed, always visible)
+        bottom_frame = ttk.Frame(master_frame)
+        bottom_frame.pack(fill="x", side="bottom", padx=10, pady=10)
+        
+        # Add bottom controls
+        import_btn = ttk.Button(bottom_frame, text="Import Config", 
+                               command=self.import_config,
+                               style="info.TButton",
+                               width=15)
+        import_btn.pack(side="left", padx=5)
 
+        stop_btn = ttk.Button(bottom_frame, text="Stop (F2)", 
+                             command=self.stop_detection,
+                             style="danger.TButton",
+                             width=12)
+        stop_btn.pack(side="right", padx=5)
+
+        start_btn = ttk.Button(bottom_frame, text="Start (F1)", 
+                              command=self.start_detection,
+                              style="success.TButton",
+                              width=12)
+        start_btn.pack(side="right", padx=5)
+        
+        # Initialize webhook entries
         self.webhook_entries = []
-        webhooks = self.config.get("webhooks", [{"url": "", "user_id": ""}])
+        webhooks = self.config.get("webhooks", [])
 
+        # Function to add a webhook entry with improved layout
         def add_webhook_entry(webhook=None):
+            """Add a webhook entry to the UI with account notification settings"""
             entry_idx = len(self.webhook_entries)
-
-            entry_frame = ttk.Frame(self.webhook_content_frame)
-            entry_frame.pack(fill='x', pady=1, padx=2)
-
-            idx_label = ttk.Label(entry_frame, text=f"#{entry_idx + 1}", width=3)
-            idx_label.pack(side='left', padx=(0, 2))
-
-            url_entry = ttk.Entry(entry_frame)
-            url_entry.pack(side='left', fill='x', expand=True, padx=2)
-            if webhook:
+            webhook_data = {}
+            
+            # Create clean entry frame with more spacing
+            entry_frame = ttk.LabelFrame(self.webhook_content_frame, text=f"Webhook #{entry_idx + 1}")
+            entry_frame.pack(fill='x', pady=8, padx=5)
+            
+            # URL section with cleaner layout
+            url_frame = ttk.Frame(entry_frame)
+            url_frame.pack(fill='x', pady=8, padx=8)
+            
+            url_label = ttk.Label(url_frame, text="URL:", width=5)
+            url_label.pack(side='left', padx=(0, 5))
+            
+            url_entry = ttk.Entry(url_frame)
+            url_entry.pack(side='left', fill='x', expand=True, padx=(0, 10))
+            if webhook and "url" in webhook:
                 url_entry.insert(0, webhook.get("url", ""))
             url_entry.configure(show="•")
-
-            status_label = ttk.Label(entry_frame, text="Empty", width=6)
-            status_label.pack(side='left', padx=2)
-
-            def toggle_visibility():
-                current = url_entry.cget("show")
-                url_entry.configure(show="" if current else "•")
-
+            
+            webhook_data["url_entry"] = url_entry
+            
+            # Action buttons in their own row for more space
+            button_frame = ttk.Frame(entry_frame)
+            button_frame.pack(fill='x', pady=(0, 8), padx=8)
+            
+            test_btn = ttk.Button(button_frame, text="Test", 
+                               command=lambda: self.test_webhook(url_entry.get().strip()),
+                               style="info.TButton", width=8)
+            test_btn.pack(side='left', padx=5)
+            
+            show_btn = ttk.Button(button_frame, text="Show", 
+                                command=lambda: url_entry.configure(show=""),
+                                style="secondary.TButton", width=8)
+            show_btn.pack(side='left', padx=5)
+            
+            hide_btn = ttk.Button(button_frame, text="Hide", 
+                                command=lambda: url_entry.configure(show="•"),
+                                style="secondary.TButton", width=8)
+            hide_btn.pack(side='left', padx=5)
+            
+            remove_btn = ttk.Button(button_frame, text="Remove", 
+                                  command=lambda: remove_webhook(),
+                                  style="danger.TButton", width=8)
+            remove_btn.pack(side='right', padx=5)
+            
+            # Status display - clearer layout
+            status_frame = ttk.Frame(entry_frame)
+            status_frame.pack(fill='x', pady=(0, 8), padx=8)
+            
+            status_label = ttk.Label(status_frame, text="Status:")
+            status_label.pack(side='left')
+            
+            status_value = ttk.Label(status_frame, text="Not validated", foreground="gray")
+            status_value.pack(side='left', padx=(5, 0))
+            
+            # Account notification section with cleaner layout
+            notify_frame = ttk.Frame(entry_frame)
+            notify_frame.pack(fill='x', pady=(0, 8), padx=8)
+            
+            # "Notify all accounts" option
+            notify_all_var = tk.BooleanVar(value=True)
+            if webhook and "account_notifications" in webhook:
+                # If there are specific accounts, set to False
+                notify_all_var.set(not webhook.get("account_notifications"))
+            
+            webhook_data["notify_all_accounts"] = notify_all_var
+            webhook_data["account_notifications"] = webhook.get("account_notifications", []) if webhook else []
+            
+            all_accounts_check = ttk.Checkbutton(
+                notify_frame,
+                text="Notify for all accounts",
+                variable=notify_all_var,
+                command=lambda: toggle_account_selection()
+            )
+            all_accounts_check.pack(anchor='w')
+            
+            # Account selection area (hidden by default if "all accounts" is checked)
+            account_selection_frame = ttk.Frame(entry_frame)
+            
+            # Account selection controls with more space
+            controls_frame = ttk.Frame(account_selection_frame)
+            controls_frame.pack(fill='x', pady=(0, 5), padx=8)
+            
+            filter_label = ttk.Label(controls_frame, text="Filter:")
+            filter_label.pack(side="left", padx=(0, 5))
+            
+            filter_var = tk.StringVar()
+            filter_entry = ttk.Entry(controls_frame, textvariable=filter_var)
+            filter_entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
+            
+            select_all_btn = ttk.Button(controls_frame, text="Select All", 
+                                      command=lambda: select_all_accounts(),
+                                      style="secondary.TButton", width=10)
+            select_all_btn.pack(side="right", padx=5)
+            
+            select_none_btn = ttk.Button(controls_frame, text="None", 
+                                       command=lambda: select_none_accounts(),
+                                       style="secondary.TButton", width=8)
+            select_none_btn.pack(side="right", padx=0)
+            
+            # Create a clean account listbox with more space
+            account_list_frame = ttk.Frame(account_selection_frame)
+            account_list_frame.pack(fill='both', expand=True, padx=8, pady=(0, 8))
+            
+            # Use a taller listbox for better visibility
+            account_listbox = tk.Listbox(account_list_frame, height=7, selectmode=tk.SINGLE)
+            account_scrollbar = ttk.Scrollbar(account_list_frame, orient="vertical", command=account_listbox.yview)
+            account_listbox.config(yscrollcommand=account_scrollbar.set)
+            
+            account_listbox.pack(side="left", fill="both", expand=True)
+            account_scrollbar.pack(side="right", fill="y")
+            
+            account_vars = {}
+            
+            # Function to update the checkbutton state when clicked through the listbox
+            def on_select_account(event):
+                try:
+                    # Save current view position
+                    current_view = account_listbox.yview()
+                    
+                    index = account_listbox.curselection()[0]
+                    item_text = account_listbox.get(index)
+                    
+                    # Extract username by removing the checkbox symbol
+                    if item_text.startswith("☑ "):
+                        username = item_text[2:].strip()
+                    elif item_text.startswith("☐ "):
+                        username = item_text[2:].strip()
+                    else:
+                        username = item_text.strip()
+                    
+                    if username in account_vars:
+                        # Toggle the checkbox state
+                        current_state = account_vars[username].get()
+                        account_vars[username].set(not current_state)
+                        save_account_selection()
+                        
+                        # Update the display without changing scroll position
+                        account_listbox.selection_clear(0, tk.END)
+                        update_listbox_items()
+                        
+                        # Restore original view position
+                        account_listbox.yview_moveto(current_view[0])
+                        
+                        # Restore selection without scrolling
+                        for i in range(account_listbox.size()):
+                            if (f"☑ {username}" in account_listbox.get(i) or 
+                                f"☐ {username}" in account_listbox.get(i)):
+                                account_listbox.selection_set(i)
+                                break
+                except (IndexError, KeyError):
+                    pass
+                
+            account_listbox.bind("<<ListboxSelect>>", on_select_account)
+            
+            def select_all_accounts():
+                for username in account_vars:
+                    account_vars[username].set(True)
+                save_account_selection()
+                update_listbox_items()
+            
+            def select_none_accounts():
+                for username in account_vars:
+                    account_vars[username].set(False)
+                save_account_selection()
+                update_listbox_items()
+            
+            # Function to populate the listbox with checkbutton-like items
+            def update_listbox_items():
+                account_listbox.delete(0, tk.END)
+                
+                filter_text = filter_var.get().lower().strip()
+                
+                for username in sorted(account_vars.keys()):
+                    if filter_text and filter_text not in username.lower():
+                        continue
+                        
+                    # Display checkmark or empty box based on selection state
+                    if account_vars[username].get():
+                        account_listbox.insert(tk.END, f"☑ {username}")
+                    else:
+                        account_listbox.insert(tk.END, f"☐ {username}")
+            
+            # Create account vars
+            def create_account_checkboxes():
+                account_vars.clear()
+                
+                # If no accounts, show a message
+                if not self.accounts:
+                    account_listbox.insert(tk.END, "No accounts configured")
+                    return
+                
+                # Create variables for each account
+                for account in self.accounts:
+                    username = account.get("username", "")
+                    if username:
+                        account_vars[username] = tk.BooleanVar(
+                            value=username in webhook_data["account_notifications"]
+                        )
+                
+                update_listbox_items()
+            
+            # Update when filter changes
+            filter_var.trace_add("write", lambda *args: update_listbox_items())
+            
+            # Toggle account selection visibility
+            def toggle_account_selection():
+                if notify_all_var.get():
+                    account_selection_frame.pack_forget()
+                    webhook_data["account_notifications"] = []
+                else:
+                    account_selection_frame.pack(fill='x', pady=(0, 5))
+                    create_account_checkboxes()
+                self.save_config()
+            
+            # Save selected accounts
+            def save_account_selection():
+                webhook_data["account_notifications"] = [
+                    username for username, var in account_vars.items() 
+                    if var.get()
+                ]
+                self.save_config()
+            
+            # Button to remove this webhook
             def remove_webhook():
                 entry_frame.destroy()
-                self.webhook_entries.remove(url_entry)
+                self.webhook_entries.remove(webhook_data)
                 self.save_config()
-
+                
+                # Renumber remaining webhook frames
                 for i, child in enumerate(self.webhook_content_frame.winfo_children()):
-                    for idx_label in child.winfo_children():
-                        if isinstance(idx_label, ttk.Label) and idx_label.cget("width") == 3:
-                            idx_label.configure(text=f"#{i + 1}")
-                            break
-
-            popup = tk.Menu(self.root, tearoff=0)
-            popup.add_command(label="Show/Hide URL", command=toggle_visibility)
-            popup.add_command(label="Test Webhook", 
-                            command=lambda: self.test_webhook(url_entry.get().strip()))
-            popup.add_separator()
-            popup.add_command(label="Remove Webhook", command=remove_webhook)
-
-            def show_popup(event):
-                popup.post(event.x_root, event.y_root)
-
-            menu_btn = ttk.Button(entry_frame, text=">", width=3,
-                                command=lambda e=None: None,
-                                style="info.TButton")
-            menu_btn.pack(side='left', padx=1)
-            menu_btn.bind("<Button-1>", show_popup)
-
-            self.webhook_entries.append(url_entry)
-
+                    child.configure(text=f"Webhook #{i + 1}")
+            
+            # Webhook validation on focus out
             def validate_webhook(event=None):
                 url = url_entry.get().strip()
                 if not url:
-                    status_label.configure(text="Empty", foreground="gray")
+                    status_value.configure(text="Empty", foreground="gray")
                     return False
-
+                
                 if not url.startswith("https://discord.com/api/webhooks/"):
-                    status_label.configure(text="Invalid", foreground="red")
+                    status_value.configure(text="Invalid URL", foreground="red")
                     return False
-
+                
                 try:
-
                     response = requests.get(url, params={"wait": "true"})
-
+                    
                     if response.status_code == 200:
-                        status_label.configure(text="Valid", foreground="green")
+                        status_value.configure(text="Valid", foreground="green")
                         return True
                     else:
-                        status_label.configure(text="Invalid", foreground="red")
+                        status_value.configure(text="Invalid", foreground="red")
                         return False
                 except Exception as e:
                     print(f"Error validating webhook: {e}")
-                    status_label.configure(text="Error", foreground="red")
+                    status_value.configure(text="Error", foreground="red")
                     return False
-
+            
             url_entry.bind("<FocusOut>", lambda event: [self.save_config(), validate_webhook()])
             validate_webhook()
+            
+            # Create account checkboxes initially
+            create_account_checkboxes()
+            
+            # Show/hide account selection based on initial state
+            if notify_all_var.get():
+                account_selection_frame.pack_forget()
+            else:
+                account_selection_frame.pack(fill='x', pady=(0, 5))
+            
+            # Add to entries list
+            self.webhook_entries.append(webhook_data)
+            return webhook_data
 
+        # Add existing webhooks
         for webhook in webhooks:
             add_webhook_entry(webhook)
-
-        add_webhook_btn = ttk.Button(content_area, text="Add Webhook", 
-                                    command=lambda: add_webhook_entry(),
-                                    style="info.TButton")
-        add_webhook_btn.pack(anchor='w', padx=5, pady=5)
-
-        bottom_controls = ttk.Frame(webhook_frame)
-        bottom_controls.pack(side="bottom", fill="x", padx=5, pady=5)
-
-        ttk.Button(bottom_controls, text="Configure Biomes", 
-                  command=self.open_biome_settings,
-                  style="info.TButton").pack(side="left", padx=2)
-
-        ttk.Button(bottom_controls, text="Import Config", 
-                  command=self.import_config,
-                  style="info.TButton").pack(side="left", padx=2)
-
-        ttk.Button(bottom_controls, text="Stop (F2)", 
-                  command=self.stop_detection,
-                  style="danger.TButton").pack(side="right", padx=2)
-
-        ttk.Button(bottom_controls, text="Start (F1)", 
-                  command=self.start_detection,
-                  style="success.TButton").pack(side="right", padx=2)
 
     def create_misc_tab(self, frame):
         """Create the miscellaneous tab - Removed for simplified version"""
@@ -1015,7 +1439,7 @@ class BiomePresence():
             try:
                 color = f"#{int(self.biome_data[biome]['color'], 16):06x}"
             except:
-                color = "#FFFFFF"  
+                color = "#FFFFFF"
 
             label = ttk.Label(frame, text=f"{biome}: {self.biome_counts.get(biome, 0)}", foreground=color)
 
@@ -1148,7 +1572,7 @@ class BiomePresence():
         github_label = ttk.Label(support_frame, text="GitHub: https://github.com/cresqnt/BiomeScope")
         github_label.pack(anchor="w", padx=10, pady=5)
 
-        copyright_label = ttk.Label(frame, text="© 2023-2024 Noteab. All rights reserved.")
+        copyright_label = ttk.Label(frame, text="© 2025 cresqnt. All rights reserved.")
         copyright_label.pack(side="bottom", pady=20)
 
     def create_merchant_tab(self, frame):
@@ -1221,7 +1645,7 @@ class BiomePresence():
                     match = re.search(r'[Pp]layer\.?[Nn]ame\s*=\s*["\']([^"\']+)["\']|[Uu]sername["\']:\s*["\']([^"\']+)["\']|[Dd]isplay[Nn]ame["\']:\s*["\']([^"\']+)["\']', line)
                     if match:
                         username = next((g for g in match.groups() if g), None)
-                        if username:
+                    if username:
                             self.append_log(f"Extracted username from log: {username}")
                             break
 
@@ -1523,8 +1947,12 @@ class BiomePresence():
 
     def biome_loop_check(self):
         try:
-
-            self.check_biome_in_logs()
+            # If multi-account is enabled, use the simultaneous method
+            if self.accounts and len(self.accounts) > 0:
+                self.check_all_accounts_biomes_at_once()
+            else:
+                # Fallback to single-account mode
+                self.check_biome_in_logs()
 
             if self.config.get("enable_aura_detection", False):
                 log_file_path = self.get_latest_log_file()
@@ -1539,11 +1967,11 @@ class BiomePresence():
     def multi_account_biome_loop(self):
         """Check for biomes in logs for multiple accounts"""
         try:
-
             if not hasattr(self, 'accounts') or not self.accounts:
                 self.accounts = self.config.get("accounts", [])
                 self.append_log(f"Loading accounts in multi_account_biome_loop: {len(self.accounts)} accounts found")
 
+            # Initialize tracking dictionaries if they don't exist
             if not hasattr(self, 'account_biomes'):
                 self.account_biomes = {}
 
@@ -1561,39 +1989,26 @@ class BiomePresence():
             while self.detection_running:
                 try:
                     check_count += 1
-                    log_verbose = (check_count % 10 == 1)  
-
+                    log_verbose = (check_count % 10 == 1)
+                    
                     if not self.accounts:
-                        time.sleep(5)  
+                        time.sleep(5)
                         continue
-
-                    for i, account in enumerate(self.accounts):
-                        username = account.get("username")
-                        if not username:
-                            continue
-
-                        if log_verbose:
-                            self.append_log(f"Checking biomes for account {i+1}/{len(self.accounts)}: {username}")
-
-                        log_file = self.get_log_file_for_user(username)
-
-                        if not log_file:
-                            if log_verbose:
-                                self.append_log(f"No log file found for account: {username}")
-                            continue
-
-                        if log_verbose:
-                            self.append_log(f"Using log file for {username}: {os.path.basename(log_file)}")
-
-                        self.check_account_biome_in_logs(username, log_file)
-
+                    
+                    if log_verbose:
+                        self.append_log(f"Checking biomes for all {len(self.accounts)} accounts simultaneously")
+                    
+                    # Use our new method to check all accounts at once
+                    self.check_all_accounts_biomes_at_once()
+                    
+                    # Regular sleep between cycles
                     time.sleep(5)
 
                 except Exception as e:
                     error_msg = f"Error in multi_account_biome_loop cycle: {str(e)}"
                     self.append_log(error_msg)
                     self.error_logging(e, error_msg)
-                    time.sleep(5)  
+                    time.sleep(5)
 
             self.append_log("Multi-account biome detection loop stopped")
 
@@ -1601,7 +2016,7 @@ class BiomePresence():
             error_msg = f"Error in multi_account_biome_loop: {str(e)}"
             self.append_log(error_msg)
             self.error_logging(e, error_msg)
-            time.sleep(5)  
+            time.sleep(5)
 
     def check_account_biome_in_logs(self, username, log_file_path):
         """Check for biomes in the log files for a specific account"""
@@ -1771,7 +2186,7 @@ class BiomePresence():
                         self.biome_counts[biome] = self.biome_counts.get(biome, 0) + 1
                         self.config["biome_counts"] = self.biome_counts
                         self.save_config()
-
+            
                     self.account_biomes[username] = biome
 
                     self.account_last_sent[username][biome] = now
@@ -1902,7 +2317,7 @@ class BiomePresence():
                         "ps_link": ps_link
                     })
 
-            self.save_config()
+                self.save_config()
 
             accounts_window.destroy()
 
@@ -1934,29 +2349,52 @@ class BiomePresence():
         title = f"📊 Status Update"
         description = f"## {timestamp} {status}\n"
 
-        if self.accounts:
-            description += "\n### Tracked Accounts:\n"
-            for account in self.accounts:
-                username = account.get("username", "Unknown")
-                description += f"- {username}\n"
-
-        embed = {
-            "title": title,
-            "description": description,
-            "color": color,
-            "footer": {
-                "text": f"BiomeScope | Version {self.version}",
-                "icon_url": icon_url
-            },
-            "timestamp": None
-        }
-
+        # For status updates, include all accounts that each webhook is configured to track
         webhook_success = False
         for webhook in webhooks:
             try:
                 webhook_url = webhook.get("url", "").strip()
                 if not webhook_url:
                     continue
+                
+                # Create a customized description for each webhook based on its account settings
+                custom_description = description
+                
+                # Add session duration to the status message
+                if "Started" in status:
+                    custom_description += f"**Session Duration:** Just started"
+                elif "Stopped" in status:
+                    custom_description += f"**Session Duration:** {self.get_total_session_time()}"
+                
+                account_notifications = webhook.get("account_notifications", [])
+                
+                if account_notifications:
+                    # This webhook only tracks specific accounts
+                    filtered_accounts = [account for account in self.accounts 
+                                       if account.get("username", "") in account_notifications]
+                    
+                    if filtered_accounts:
+                        custom_description += "\n### Tracked Accounts:\n"
+                        for account in filtered_accounts:
+                            username = account.get("username", "Unknown")
+                            custom_description += f"- {username}\n"
+                elif self.accounts:
+                    # This webhook tracks all accounts
+                    custom_description += "\n### Tracked Accounts:\n"
+                    for account in self.accounts:
+                        username = account.get("username", "Unknown")
+                        custom_description += f"- {username}\n"
+
+                embed = {
+                    "title": title,
+                    "description": custom_description,
+                    "color": color,
+                    "footer": {
+                        "text": f"BiomeScope | Version {self.version}",
+                        "icon_url": icon_url
+                    },
+                    "timestamp": None
+                }
 
                 response = requests.post(
                     webhook_url,
@@ -1969,14 +2407,14 @@ class BiomePresence():
                 response.raise_for_status()
                 self.append_log(f"Sent status webhook: {status}")
                 webhook_success = True
-            except requests.exceptions.RequestException as e:
+            except Exception as e:
                 error_msg = f"Failed to send status webhook: {str(e)}"
+                print(error_msg)
                 self.append_log(error_msg)
                 self.error_logging(e, "Failed to send status webhook")
 
         if not webhook_success and webhooks:
-            self.append_log(f"WARNING: Failed to send status webhook: {status}")
-            print(f"WARNING: Failed to send status webhook: {status}")
+            self.append_log("WARNING: Failed to send all status webhooks")
 
     def biome_itemchange_loop(self):
         """Loop for detecting biome via item changes - Removed for simplified version"""
@@ -2003,7 +2441,6 @@ class BiomePresence():
         current_time = time.time()
         time_since_last_webhook = current_time - self.last_webhook_time
         if time_since_last_webhook < self.webhook_rate_limit:
-
             sleep_time = self.webhook_rate_limit - time_since_last_webhook
             self.append_log(f"Rate limiting webhook for {username}'s {biome}, waiting {sleep_time:.2f} seconds")
             time.sleep(sleep_time)
@@ -2057,6 +2494,12 @@ class BiomePresence():
         description += f"**Time:** {timestamp_full} ({timestamp_relative})\n"
 
         if event_type == "start":
+            # Add private server link to the embed description
+            if ps_link:
+                description += f"**Private Server:** {ps_link}\n"
+            else:
+                description += f"**Private Server:** No link provided\n"
+                
             description += f"**Status:** Active ✅\n"
         else:
             description += f"**Status:** Ended ⏹️\n"
@@ -2088,6 +2531,12 @@ class BiomePresence():
             try:
                 webhook_url = webhook.get("url", "").strip()
                 if not webhook_url:
+                    continue
+                
+                # Check if this webhook should receive notifications for this account
+                account_notifications = webhook.get("account_notifications", [])
+                if account_notifications and username not in account_notifications:
+                    self.append_log(f"Skipping webhook for {username}'s {biome} - account not selected for this webhook")
                     continue
 
                 self.append_log(f"Sending webhook for {username}'s {biome} with PS link: {ps_link}")
@@ -2155,7 +2604,7 @@ class BiomePresence():
         if not hasattr(self, 'logs'):
             self.logs = []
 
-        self.root.title("BiomeScope | Version 1.0.1-Hotfix (Running)")
+        self.root.title("BiomeScope | Version 1.0.2-Beta (Running)")
 
         self.detection_thread = threading.Thread(target=self.multi_account_biome_loop, daemon=True)
         self.detection_thread.start()
@@ -2181,9 +2630,12 @@ class BiomePresence():
 
         self.save_config()
 
-        self.root.title("BiomeScope | Version 1.0.1-Hotfix (Stopped)")
+        self.root.title("BiomeScope | Version 1.0.2-Beta (Stopped)")
 
         self.send_webhook_status("Biome Detection Stopped", 0xFF0000)  
+        
+        # Reset session time after sending the webhook
+        self.saved_session = 0
 
         self.current_biome = None
         self.account_biomes = {}
@@ -2779,47 +3231,55 @@ def get_user_activity_data(self, username, days_back=30):
             current_date += timedelta(days=1)
 
         with open(log_file, 'r', encoding='utf-8', errors='ignore') as file:
-            for line in file:
-                try:
+            content = file.readlines()
 
-                    if username.lower() not in line.lower():
-                        continue
-
-                    match = re.search(r'\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\].*?' + re.escape(username) + r'.*?(logged in|completed|submitted|viewed|accessed|downloaded|uploaded|modified)', line, re.IGNORECASE)
-                    if not match:
-                        continue
-
-                    timestamp_str = match.group(1)
-                    action = match.group(2).lower()
-
-                    timestamp = datetime.strptime(timestamp_str, '%Y-%m-%d %H:%M:%S')
-
-                    if timestamp < start_date or timestamp > end_date:
-                        continue
-
-                    date_str = timestamp.strftime('%Y-%m-%d')
-
-                    activity_data['total_actions'] += 1
-
-                    if action not in activity_data['action_types']:
-                        activity_data['action_types'][action] = 0
-                    activity_data['action_types'][action] += 1
-
-                    if date_str in activity_data['daily_activity']:
-                        activity_data['daily_activity'][date_str]['count'] += 1
-                        if action not in activity_data['daily_activity'][date_str]['actions']:
-                            activity_data['daily_activity'][date_str]['actions'][action] = 0
-                        activity_data['daily_activity'][date_str]['actions'][action] += 1
-
-                    if activity_data['first_activity'] is None or timestamp < datetime.strptime(activity_data['first_activity'], '%Y-%m-%d %H:%M:%S'):
-                        activity_data['first_activity'] = timestamp_str
-
-                    if activity_data['last_activity'] is None or timestamp > datetime.strptime(activity_data['last_activity'], '%Y-%m-%d %H:%M:%S'):
-                        activity_data['last_activity'] = timestamp_str
-
-                except Exception as e:
-                    self.error_logging(e, f"Error processing log line for {username}")
+        for line in content:
+            try:
+                match = re.search(r'\[([\d\-]+ [\d:]+)\]', line)
+                if not match:
                     continue
+
+                timestamp_str = match.group(1)
+                timestamp = datetime.strptime(timestamp_str, '%Y-%m-%d %H:%M:%S')
+
+                if timestamp < start_date or timestamp > end_date:
+                    continue
+
+                date_str = timestamp.strftime('%Y-%m-%d')
+
+                action = "Activity"
+                if "biome" in line.lower():
+                    action = "Biome"
+                elif "webhook" in line.lower():
+                    action = "Webhook"
+                elif "aura" in line.lower():
+                    action = "Aura"
+                elif "buff" in line.lower() or "potion" in line.lower():
+                    action = "Buff"
+                elif "merchant" in line.lower() or "mari" in line.lower() or "jester" in line.lower():
+                    action = "Merchant"
+
+                activity_data['total_actions'] += 1
+
+                if action not in activity_data['action_types']:
+                    activity_data['action_types'][action] = 0
+                activity_data['action_types'][action] += 1
+
+                if date_str in activity_data['daily_activity']:
+                    activity_data['daily_activity'][date_str]['count'] += 1
+                    if action not in activity_data['daily_activity'][date_str]['actions']:
+                        activity_data['daily_activity'][date_str]['actions'][action] = 0
+                    activity_data['daily_activity'][date_str]['actions'][action] += 1
+
+                if activity_data['first_activity'] is None or timestamp < datetime.strptime(activity_data['first_activity'], '%Y-%m-%d %H:%M:%S'):
+                    activity_data['first_activity'] = timestamp_str
+
+                if activity_data['last_activity'] is None or timestamp > datetime.strptime(activity_data['last_activity'], '%Y-%m-%d %H:%M:%S'):
+                    activity_data['last_activity'] = timestamp_str
+
+            except Exception as e:
+                self.error_logging(e, f"Error processing log line for {username}")
+                continue
 
         for date_str, day_data in activity_data['daily_activity'].items():
             if day_data['count'] > 0:

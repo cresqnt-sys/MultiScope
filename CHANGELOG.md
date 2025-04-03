@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.2-Beta] - 2025-04-15
+
+### Added
+- Private Server link in Discord webhook embeds
+- Start/Stop session times in webhook
+- Account-specific biome notification selection for each webhook (selection)
+- Improved biome detection system with faster response times
+  - Sub 1-second detection times for both single and multiple accounts (Tested on 5 accounts running at the same time)
+  - More efficient scanning algorithm
+
 ## [1.0.1-Hotfix] - 2025-04-01
 
 ### Fixed
@@ -49,6 +59,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Session time tracking bugs
 - UI responsiveness in high DPI displays
 
-[Unreleased]: https://github.com/cresqnt-sys/BiomeScope/compare/v1.0.1-Beta...HEAD
+[Unreleased]: https://github.com/cresqnt-sys/BiomeScope/compare/v1.0.2-Beta...HEAD
+[1.0.2-Beta]: https://github.com/cresqnt-sys/BiomeScope/compare/v1.0.1-Hotfix...v1.0.2-Beta
+[1.0.1-Hotfix]: https://github.com/cresqnt-sys/BiomeScope/compare/v1.0.1-Beta...v1.0.1-Hotfix
 [1.0.1-Beta]: https://github.com/cresqnt-sys/BiomeScope/compare/v1.0.0-Beta...v1.0.1-Beta
 [1.0.0-Beta]: https://github.com/cresqnt-sys/BiomeScope/releases/tag/v1.0.0-Beta 
