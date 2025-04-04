@@ -7,7 +7,7 @@ import sys
 
 # Fix for taskbar icon - set AppUserModelID
 if hasattr(sys, 'frozen'):  # Running as compiled
-    myappid = 'BiomeScope.App.1.0.2.Beta'
+    myappid = 'BiomeScope.App.1.0.2.Hotfix'
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
 
 try:
@@ -85,7 +85,7 @@ class BiomePresence():
         except locale.Error:
             locale.setlocale(locale.LC_ALL, '')
 
-        self.version = "1.0.2-Beta"
+        self.version = "1.0.2-Hotfix"
 
         self.logs_dir = os.path.join(os.getenv('LOCALAPPDATA'), 'Roblox', 'logs')
 
@@ -174,6 +174,27 @@ class BiomePresence():
                 
             if not hasattr(self, 'username_log_cache'):
                 self.username_log_cache = {}
+                
+            # Add a counter for periodic reassociation
+            if not hasattr(self, 'log_reassoc_counter'):
+                self.log_reassoc_counter = 0
+            
+            # Increment counter and check if we should do a full reassociation
+            # This will help detect new instances that were opened after the macro started
+            self.log_reassoc_counter += 1
+            full_reassociation = (self.log_reassoc_counter % 12 == 0)  # Roughly every 60 seconds (12 * 5s sleep)
+            
+            if full_reassociation:
+                self.append_log("Performing full log file reassociation to detect new Roblox instances")
+                # Clear cache for unassigned accounts to force fresh search
+                for account in self.accounts:
+                    username = account.get("username")
+                    if username and (username not in self.username_log_cache or 
+                                    not os.path.exists(self.username_log_cache.get(username, ""))):
+                        if username in self.username_log_cache:
+                            del self.username_log_cache[username]
+                        if username in self.account_last_positions:
+                            del self.account_last_positions[username]
 
             # Get all log files at once
             all_log_files = self.get_log_files()
@@ -1983,7 +2004,10 @@ class BiomePresence():
 
             if not hasattr(self, 'timestamp_logged_files'):
                 self.timestamp_logged_files = set()
-
+            
+            # Keep track of Roblox process count for detecting new instances
+            last_roblox_count = 0
+            last_log_count = 0
             check_count = 0
 
             while self.detection_running:
@@ -1994,6 +2018,38 @@ class BiomePresence():
                     if not self.accounts:
                         time.sleep(5)
                         continue
+                    
+                    # Check for new Roblox instances every 3 cycles (15 seconds)
+                    if check_count % 3 == 0:
+                        try:
+                            # Count Roblox processes
+                            roblox_count = 0
+                            for proc in psutil.process_iter(['pid', 'name']):
+                                try:
+                                    # Use exact process name match instead of partial match
+                                    if proc.info['name'].lower() == 'robloxplayerbeta.exe':
+                                        roblox_count += 1
+                                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                                    pass
+                            
+                            # Count log files
+                            log_files = self.get_log_files()
+                            current_log_count = len(log_files) if log_files else 0
+                            
+                            # If the number of processes or log files has changed, reset cache
+                            if roblox_count != last_roblox_count or current_log_count != last_log_count:
+                                self.append_log(f"Detected change in Roblox instances: Processes {last_roblox_count} -> {roblox_count}, Logs {last_log_count} -> {current_log_count}")
+                                # If new instances were opened, force a refresh of log file cache
+                                if roblox_count > last_roblox_count or current_log_count > last_log_count:
+                                    # Clear cache to force fresh search for all accounts
+                                    self.append_log("New Roblox instance detected, refreshing log file associations")
+                                    self.username_log_cache = {}
+                                    # Don't reset positions, as we'll get new ones automatically
+                                
+                                last_roblox_count = roblox_count
+                                last_log_count = current_log_count
+                        except Exception as e:
+                            self.error_logging(e, "Error checking Roblox processes")
                     
                     if log_verbose:
                         self.append_log(f"Checking biomes for all {len(self.accounts)} accounts simultaneously")
@@ -2535,6 +2591,9 @@ class BiomePresence():
                 
                 # Check if this webhook should receive notifications for this account
                 account_notifications = webhook.get("account_notifications", [])
+                
+                # The key fix: if account_notifications is empty or None, it means notify all accounts
+                # Only skip if account_notifications has entries AND the username is not in the list
                 if account_notifications and username not in account_notifications:
                     self.append_log(f"Skipping webhook for {username}'s {biome} - account not selected for this webhook")
                     continue
@@ -2604,7 +2663,7 @@ class BiomePresence():
         if not hasattr(self, 'logs'):
             self.logs = []
 
-        self.root.title("BiomeScope | Version 1.0.2-Beta (Running)")
+        self.root.title("BiomeScope | Version 1.0.2-Hotfix (Running)")
 
         self.detection_thread = threading.Thread(target=self.multi_account_biome_loop, daemon=True)
         self.detection_thread.start()
@@ -2630,7 +2689,7 @@ class BiomePresence():
 
         self.save_config()
 
-        self.root.title("BiomeScope | Version 1.0.2-Beta (Stopped)")
+        self.root.title("BiomeScope | Version 1.0.2-Hotfix (Stopped)")
 
         self.send_webhook_status("Biome Detection Stopped", 0xFF0000)  
         
@@ -2654,10 +2713,11 @@ class BiomePresence():
                 self.append_log(f"Logs directory not found: {self.logs_dir}")
                 return None
 
+            # Get all log files sorted by modification time (newest first)
             files = []
             try:
                 for f in os.listdir(self.logs_dir):
-                    if f.endswith('.log') and ('last' in f.lower() or 'player' in f.lower()):
+                    if f.endswith('.log'):  # Check all log files, not just ones with 'last' or 'player'
                         full_path = os.path.join(self.logs_dir, f)
 
                         if os.path.isfile(full_path) and os.path.getsize(full_path) > 0:
@@ -2667,7 +2727,6 @@ class BiomePresence():
                 return None
 
             if not files:
-
                 if not hasattr(self, 'no_files_logged') or time.time() - self.no_files_logged.get(username, 0) > 300:
                     self.append_log(f"No valid log files found for user: {username}")
                     if not hasattr(self, 'no_files_logged'):
@@ -2691,43 +2750,57 @@ class BiomePresence():
                 f'Player.Name = "{username}"',
                 f'Player.Name="{username}"',
                 f'PlayerName="{username}"',
-                f'PlayerName = "{username}"'
+                f'PlayerName = "{username}"',
+                f'User {username}',
+                f'user {username}',
+                f'USER {username}'
             ]
 
             if not hasattr(self, 'verified_log_files'):
                 self.verified_log_files = {}
 
+            # Check if the username has a verified log file that still exists
             if username in self.verified_log_files:
                 verified_file = self.verified_log_files[username]
                 if verified_file in files:
+                    # Make sure the log file still contains the username (could have been recycled)
+                    try:
+                        with open(verified_file, 'r', encoding='utf-8', errors='ignore') as file:
+                            content = file.read(50000)
+                            if any(pattern in content for pattern in username_patterns):
+                                return verified_file
+                    except Exception:
+                        pass
+                    
+                    # If we reach here, the file didn't contain the username anymore
+                    del self.verified_log_files[username]
 
-                    return verified_file
-
+            # Check if username has a cached log file that still exists and contains the username
             if hasattr(self, 'username_log_cache') and username in self.username_log_cache:
                 cached_file = self.username_log_cache[username]
                 if cached_file in files:
-
-                    self.verified_log_files[username] = cached_file
-                    return cached_file
+                    try:
+                        with open(cached_file, 'r', encoding='utf-8', errors='ignore') as file:
+                            content = file.read(50000)
+                            if any(pattern in content for pattern in username_patterns):
+                                self.verified_log_files[username] = cached_file
+                                return cached_file
+                    except Exception:
+                        pass
 
             if not hasattr(self, 'username_log_cache'):
                 self.username_log_cache = {}
 
+            # Search all log files for the username patterns - prioritize newest files
             for file_path in files:
                 try:
                     with open(file_path, 'r', encoding='utf-8', errors='ignore') as file:
-
-                        content = file.read(50000)  
-
+                        content = file.read(50000)
                         if any(pattern in content for pattern in username_patterns):
-
                             self.append_log(f"Found log file for {username} (pattern match): {os.path.basename(file_path)}")
-
                             self.username_log_cache[username] = file_path
-
                             self.verified_log_files[username] = file_path
                             return file_path
-
                 except Exception as e:
                     self.error_logging(e, f"Error reading log file: {file_path}")
                     continue

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.2-Hotfix] - 2025-04-03
+
+### Fixed
+- Multi-account webhook issue where notifications weren't being sent for some accounts
+- Improved detection of new Roblox instances started after the macro is running
+- Enhanced log file detection to find and associate all account logs properly
+- Made Roblox process detection more precise by exactly matching "RobloxPlayerBeta.exe" and using PID better
+- Improved log file cache management when new instances are detected
+
 ## [1.0.2-Beta] - 2025-04-02
 
 ### Added
@@ -59,7 +68,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Session time tracking bugs
 - UI responsiveness in high DPI displays
 
-[Unreleased]: https://github.com/cresqnt-sys/BiomeScope/compare/v1.0.2-Beta...HEAD
+[Unreleased]: https://github.com/cresqnt-sys/BiomeScope/compare/v1.0.2-Hotfix...HEAD
+[1.0.2-Hotfix]: https://github.com/cresqnt-sys/BiomeScope/compare/v1.0.2-Beta...v1.0.2-Hotfix
 [1.0.2-Beta]: https://github.com/cresqnt-sys/BiomeScope/compare/v1.0.1-Hotfix...v1.0.2-Beta
 [1.0.1-Hotfix]: https://github.com/cresqnt-sys/BiomeScope/compare/v1.0.1-Beta...v1.0.1-Hotfix
 [1.0.1-Beta]: https://github.com/cresqnt-sys/BiomeScope/compare/v1.0.0-Beta...v1.0.1-Beta
