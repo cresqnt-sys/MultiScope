@@ -2737,8 +2737,9 @@ class BiomePresence():
                     self.no_match_logged = {}
                 self.no_match_logged[username] = time.time()
 
-            # Only assign an available file if we are sure it's not being used by another user
+            # If no exact match was found, we'll try to assign a file
             if files:
+                # First try to find an unassigned file that contains "[BloxstrapRPC]" for biome detection
                 available_file = None
                 for file_path in files:
                     file_already_assigned = False
@@ -2749,25 +2750,46 @@ class BiomePresence():
                                 break
 
                     if not file_already_assigned:
-                        # Only assign if we can verify the username is in the file
                         try:
                             with open(file_path, 'r', encoding='utf-8', errors='ignore') as file:
                                 content = file.read(50000)
+                                # First priority: contains username
                                 if any(pattern in content for pattern in username_patterns):
                                     available_file = file_path
+                                    self.append_log(f"Found log file with username: {os.path.basename(file_path)}")
                                     break
+                                # Second priority: contains RPC messages
+                                elif "[BloxstrapRPC]" in content:
+                                    available_file = file_path
+                                    self.append_log(f"Found log file with RPC messages: {os.path.basename(file_path)}")
+                                    # Don't break here - continue looking for one with username
                         except Exception:
                             continue
+
+                # If no file with username or RPC messages was found, just use any available file
+                if not available_file:
+                    for file_path in files:
+                        file_already_assigned = False
+                        if hasattr(self, 'username_log_cache'):
+                            for other_user, other_file in self.username_log_cache.items():
+                                if other_file == file_path:
+                                    file_already_assigned = True
+                                    break
+                        if not file_already_assigned:
+                            available_file = file_path
+                            self.append_log(f"No specific match, using available log file: {os.path.basename(file_path)}")
+                            break
 
                 if available_file:
                     self.append_log(f"Assigning available log file to {username}: {os.path.basename(available_file)}")
                     self.username_log_cache[username] = available_file
-                    self.verified_log_files[username] = available_file
                     return available_file
                 else:
-                    # Don't automatically assign files that don't match the username
-                    self.append_log(f"No suitable log file found for {username}. Manual intervention may be required.")
-                    return None
+                    # If all files are assigned, use newest file and warn
+                    newest_file = files[0]
+                    self.append_log(f"All log files are assigned. Using newest file for {username}: {os.path.basename(newest_file)}")
+                    self.username_log_cache[username] = newest_file
+                    return newest_file
 
             return None
 
@@ -3115,6 +3137,13 @@ class BiomePresence():
         try:
             if "[BloxstrapRPC]" not in rpc_message:
                 return None
+
+            # Ensure biome_data is loaded
+            if not hasattr(self, 'biome_data') or not self.biome_data:
+                self.biome_data = self.load_biome_data()
+                if not self.biome_data:
+                    self.append_log("Error: biome_data is empty in get_biome_from_rpc")
+                    return None
 
             if "largeImage" in rpc_message:
 
