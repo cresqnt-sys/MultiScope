@@ -7,7 +7,7 @@ import sys
 
 # Fix for taskbar icon - set AppUserModelID
 if hasattr(sys, 'frozen'):  # Running as compiled
-    myappid = 'BiomeScope.App.1.0.2.Hotfix'
+    myappid = 'BiomeScope.App.1.0.2.Hotfix2'
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
 
 try:
@@ -85,7 +85,7 @@ class BiomePresence():
         except locale.Error:
             locale.setlocale(locale.LC_ALL, '')
 
-        self.version = "1.0.2-Hotfix"
+        self.version = "1.0.2-Hotfix2"
 
         self.logs_dir = os.path.join(os.getenv('LOCALAPPDATA'), 'Roblox', 'logs')
 
@@ -186,15 +186,17 @@ class BiomePresence():
             
             if full_reassociation:
                 self.append_log("Performing full log file reassociation to detect new Roblox instances")
-                # Clear cache for unassigned accounts to force fresh search
+                # Clear cache for all accounts to force fresh search
                 for account in self.accounts:
                     username = account.get("username")
-                    if username and (username not in self.username_log_cache or 
-                                    not os.path.exists(self.username_log_cache.get(username, ""))):
+                    if username:
+                        # Completely clear all cached log files and positions
                         if username in self.username_log_cache:
                             del self.username_log_cache[username]
                         if username in self.account_last_positions:
                             del self.account_last_positions[username]
+                        if hasattr(self, 'verified_log_files') and username in self.verified_log_files:
+                            del self.verified_log_files[username]
 
             # Get all log files at once
             all_log_files = self.get_log_files()
@@ -202,82 +204,18 @@ class BiomePresence():
                 self.append_log("No log files found to check")
                 return
 
-            # If username_log_cache doesn't have entries for all accounts, populate it
+            # Clear log files for accounts
             log_files_to_check = {}
-            new_assignments = 0
             
-            # First pass - use existing assignments
+            # Get log files for each account using the improved get_log_file_for_user method
             for account in self.accounts:
                 username = account.get("username")
                 if not username:
                     continue
                     
-                # Use cached assignment if available
-                if username in self.username_log_cache and self.username_log_cache[username] in all_log_files:
-                    log_files_to_check[username] = self.username_log_cache[username]
-                    
-            # Second pass - assign unassigned accounts to log files
-            unassigned_accounts = [account.get("username") for account in self.accounts 
-                                  if account.get("username") and account.get("username") not in log_files_to_check]
-            
-            if unassigned_accounts:
-                # Find log files not yet assigned
-                assigned_log_files = set(log_files_to_check.values())
-                available_log_files = [f for f in all_log_files if f not in assigned_log_files]
-                
-                if available_log_files:
-                    # Try to find matching log files for each unassigned account
-                    for username in unassigned_accounts:
-                        if not available_log_files:
-                            break  # No more available files
-                            
-                        # Try to find a log file containing the username
-                        username_patterns = [
-                            username,
-                            f'"{username}"', 
-                            f"'{username}'", 
-                            f">{username}<",
-                            f'DisplayName":"{username}"',
-                            f'displayName":"{username}"',
-                            f'Username":"{username}"',
-                            f'username":"{username}"',
-                            f'Name":"{username}"',
-                            f'name":"{username}"',
-                            f'Player.Name = "{username}"',
-                            f'Player.Name="{username}"',
-                            f'PlayerName="{username}"',
-                            f'PlayerName = "{username}"'
-                        ]
-                        
-                        found_match = False
-                        for file_path in available_log_files[:]:  # Copy the list to modify while iterating
-                            try:
-                                with open(file_path, 'r', encoding='utf-8', errors='ignore') as file:
-                                    content = file.read(50000)  # Read first 50KB
-                                    if any(pattern in content for pattern in username_patterns):
-                                        log_files_to_check[username] = file_path
-                                        self.username_log_cache[username] = file_path
-                                        available_log_files.remove(file_path)
-                                        new_assignments += 1
-                                        found_match = True
-                                        break
-                            except Exception as e:
-                                self.error_logging(e, f"Error reading log file for username matching: {file_path}")
-                                continue
-                        
-                        # If no match found, assign an available file
-                        if not found_match and available_log_files:
-                            log_files_to_check[username] = available_log_files[0]
-                            self.username_log_cache[username] = available_log_files[0]
-                            available_log_files.pop(0)
-                            new_assignments += 1
-                            
-                # If still unassigned accounts but no available files, just use oldest assigned file
-                if new_assignments > 0:
-                    self.append_log(f"Assigned {new_assignments} new log files to accounts")
-
-            # Check all log files in parallel
-            detected_biomes = {}
+                log_file = self.get_log_file_for_user(username)
+                if log_file and os.path.exists(log_file):
+                    log_files_to_check[username] = log_file
             
             # Process each account's log file
             for username, log_file_path in log_files_to_check.items():
@@ -349,48 +287,17 @@ class BiomePresence():
                                     f"ENVIRONMENT {biome_upper}" in line_upper
                                 ]):
                                     account_detected_biomes.add(biome)
-                                    break
                                     
-                                # Check quoted patterns
-                                if biome in account_detected_biomes:
-                                    continue
-                                    
-                                if any([
-                                    f'"{biome_upper}"' in line_upper,
-                                    f"'{biome_upper}'" in line_upper,
-                                    f"[{biome_upper}]" in line_upper,
-                                    f"({biome_upper})" in line_upper,
-                                    f"<{biome_upper}>" in line_upper,
-                                    f"«{biome_upper}»" in line_upper
-                                ]):
-                                    account_detected_biomes.add(biome)
-                                    break
-                                    
-                                # Check word boundary patterns
-                                if biome in account_detected_biomes:
-                                    continue
-                                    
-                                if (f" {biome_upper} " in line_upper or 
-                                    line_upper.startswith(f"{biome_upper} ") or 
-                                    line_upper.endswith(f" {biome_upper}") or
-                                    line_upper == biome_upper):
-                                    account_detected_biomes.add(biome)
-                        
-                        # Store detected biomes for this account
-                        if account_detected_biomes:
-                            detected_biomes[username] = account_detected_biomes
+                        # Handle any detected biomes
+                        for biome in account_detected_biomes:
+                            self.handle_account_biome_detection(username, biome)
                             
                 except Exception as e:
                     error_msg = f"Error processing log file for {username}: {str(e)}"
                     self.append_log(error_msg)
                     self.error_logging(e, error_msg)
-            
-            # After processing all logs, handle biome detections
-            if detected_biomes:
-                for username, biomes in detected_biomes.items():
-                    for biome in biomes:
-                        self.handle_account_biome_detection(username, biome)
-            
+                    continue
+                    
         except Exception as e:
             error_msg = f"Error in check_all_accounts_biomes_at_once: {str(e)}"
             self.append_log(error_msg)
@@ -2663,7 +2570,7 @@ class BiomePresence():
         if not hasattr(self, 'logs'):
             self.logs = []
 
-        self.root.title("BiomeScope | Version 1.0.2-Hotfix (Running)")
+        self.root.title("BiomeScope | Version 1.0.2-Hotfix2 (Running)")
 
         self.detection_thread = threading.Thread(target=self.multi_account_biome_loop, daemon=True)
         self.detection_thread.start()
@@ -2689,7 +2596,7 @@ class BiomePresence():
 
         self.save_config()
 
-        self.root.title("BiomeScope | Version 1.0.2-Hotfix (Stopped)")
+        self.root.title("BiomeScope | Version 1.0.2-Hotfix2 (Stopped)")
 
         self.send_webhook_status("Biome Detection Stopped", 0xFF0000)  
         
@@ -2774,6 +2681,8 @@ class BiomePresence():
                     
                     # If we reach here, the file didn't contain the username anymore
                     del self.verified_log_files[username]
+                    if username in self.username_log_cache:
+                        del self.username_log_cache[username]
 
             # Check if username has a cached log file that still exists and contains the username
             if hasattr(self, 'username_log_cache') and username in self.username_log_cache:
@@ -2785,6 +2694,12 @@ class BiomePresence():
                             if any(pattern in content for pattern in username_patterns):
                                 self.verified_log_files[username] = cached_file
                                 return cached_file
+                            else:
+                                # Log file no longer contains the username, remove from cache
+                                self.append_log(f"Cached log file for {username} no longer contains username, reassigning...")
+                                del self.username_log_cache[username]
+                                if username in self.verified_log_files:
+                                    del self.verified_log_files[username]
                     except Exception:
                         pass
 
@@ -2794,6 +2709,17 @@ class BiomePresence():
             # Search all log files for the username patterns - prioritize newest files
             for file_path in files:
                 try:
+                    # Check if file is already assigned to another user
+                    file_already_assigned = False
+                    for other_user, other_file in self.username_log_cache.items():
+                        if other_file == file_path and other_user != username:
+                            file_already_assigned = True
+                            break
+                    
+                    # Skip files already verified for other users
+                    if file_already_assigned:
+                        continue
+                        
                     with open(file_path, 'r', encoding='utf-8', errors='ignore') as file:
                         content = file.read(50000)
                         if any(pattern in content for pattern in username_patterns):
@@ -2811,8 +2737,8 @@ class BiomePresence():
                     self.no_match_logged = {}
                 self.no_match_logged[username] = time.time()
 
+            # Only assign an available file if we are sure it's not being used by another user
             if files:
-
                 available_file = None
                 for file_path in files:
                     file_already_assigned = False
@@ -2823,19 +2749,25 @@ class BiomePresence():
                                 break
 
                     if not file_already_assigned:
-                        available_file = file_path
-                        break
+                        # Only assign if we can verify the username is in the file
+                        try:
+                            with open(file_path, 'r', encoding='utf-8', errors='ignore') as file:
+                                content = file.read(50000)
+                                if any(pattern in content for pattern in username_patterns):
+                                    available_file = file_path
+                                    break
+                        except Exception:
+                            continue
 
                 if available_file:
                     self.append_log(f"Assigning available log file to {username}: {os.path.basename(available_file)}")
                     self.username_log_cache[username] = available_file
+                    self.verified_log_files[username] = available_file
                     return available_file
                 else:
-
-                    newest_file = files[0]
-                    self.append_log(f"All log files are assigned. Using newest file for {username}: {os.path.basename(newest_file)}")
-                    self.username_log_cache[username] = newest_file
-                    return newest_file
+                    # Don't automatically assign files that don't match the username
+                    self.append_log(f"No suitable log file found for {username}. Manual intervention may be required.")
+                    return None
 
             return None
 
