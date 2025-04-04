@@ -17,10 +17,10 @@ A hard-fork of Noteab's Noteab Macro.
 ## 🚀 Getting Started
 
 ### Prerequisites
-OR JUST USE THE EXE FILE IN RELEASES!!!
+OR JUST USE THE EXE FILE IN RELEASES!!! (Bloxstrap still required)
 - Python
 - Git (for cloning the repository)
-- Bloxstrap (For Multi-Instance, Optional)
+- Bloxstrap (RPC REQUIRED | Multi-Instance Optional)
 
 ### Installation
 
