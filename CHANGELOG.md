@@ -7,16 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.0.2-Hotfix] - 2025-04-03
-
-### Fixed
-- Multi-account webhook issue where notifications weren't being sent for some accounts
-- Improved detection of new Roblox instances started after the macro is running
-- Enhanced log file detection to find and associate all account logs properly
-- Made Roblox process detection more precise by exactly matching "RobloxPlayerBeta.exe" and using PID better
-- Improved log file cache management when new instances are detected
-
-## [1.0.2-Beta] - 2025-04-02
+## [1.0.2-Beta] - 2025-04-15
 
 ### Added
 - Private Server link in Discord webhook embeds
