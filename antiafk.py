@@ -31,7 +31,7 @@ class AntiAFK:
         if 'multi_instance_enabled' not in self.config:
             self.config['multi_instance_enabled'] = False
         if 'antiafk_interval' not in self.config:
-            self.config['antiafk_interval'] = 120  # Changed from 180 to 120 seconds (2 minutes)
+            self.config['antiafk_interval'] = 120  
         if 'antiafk_action' not in self.config:
             self.config['antiafk_action'] = 'space'
         if 'antiafk_user_safe' not in self.config:
@@ -88,7 +88,7 @@ class AntiAFK:
         interval_frame = ttk.Frame(controls_frame)
         interval_frame.grid(row=1, column=1, sticky="w", padx=5, pady=5)
 
-        self.interval_var = tk.StringVar(value=str(self.config.get("antiafk_interval", 120)))  # Changed default from 180 to 120
+        self.interval_var = tk.StringVar(value=str(self.config.get("antiafk_interval", 120)))  
         self.interval_entry = ttk.Entry(
             interval_frame,
             textvariable=self.interval_var,
@@ -96,7 +96,7 @@ class AntiAFK:
         )
         self.interval_entry.pack(side=tk.LEFT)
 
-        for interval, label in [(120, "2m"), (300, "5m"), (600, "10m")]:  # Updated intervals
+        for interval, label in [(120, "2m"), (300, "5m"), (600, "10m")]:  
             btn = ttk.Button(
                 interval_frame, 
                 text=label, 
@@ -129,7 +129,6 @@ class AntiAFK:
         )
         self.user_safe_cb.grid(row=3, column=0, columnspan=2, sticky="w", padx=5, pady=5)
 
-        # Add Sequential Mode option
         self.sequential_mode_var = tk.BooleanVar(value=self.config.get("antiafk_sequential_mode", False))
         self.sequential_mode_cb = ttk.Checkbutton(
             controls_frame, 
@@ -138,13 +137,12 @@ class AntiAFK:
             command=self.update_config
         )
         self.sequential_mode_cb.grid(row=4, column=0, columnspan=2, sticky="w", padx=5, pady=5)
-        
-        # Sequential delay frame
+
         sequential_delay_frame = ttk.Frame(controls_frame)
         sequential_delay_frame.grid(row=5, column=0, columnspan=2, sticky="w", padx=25, pady=2)
-        
+
         ttk.Label(sequential_delay_frame, text="Delay between actions (seconds):").pack(side=tk.LEFT, padx=5)
-        
+
         self.sequential_delay_var = tk.StringVar(value=str(self.config.get("antiafk_sequential_delay", 0.75)))
         self.sequential_delay_entry = ttk.Entry(
             sequential_delay_frame,
@@ -260,11 +258,10 @@ class AntiAFK:
             self.config['antiafk_interval'] = int(self.interval_var.get())
             self.config['antiafk_action'] = self.action_type_var.get()
             self.config['antiafk_user_safe'] = self.user_safe_var.get()
-            
-            # Add Sequential Mode settings
+
             if hasattr(self, 'sequential_mode_var'):
                 self.config['antiafk_sequential_mode'] = self.sequential_mode_var.get()
-                
+
             if hasattr(self, 'sequential_delay_var'):
                 try:
                     delay = float(self.sequential_delay_var.get())
@@ -314,7 +311,6 @@ class AntiAFK:
         if not hasattr(self, 'status_text'):
             return
 
-        # Check if the widget still exists
         try:
             timestamp = datetime.now().strftime("%H:%M:%S")
             formatted_message = f"[{timestamp}] {message}\n"
@@ -327,7 +323,7 @@ class AntiAFK:
             if hasattr(self.parent, 'append_log'):
                 self.parent.append_log(f"[Anti-AFK] {message}")
         except (tk.TclError, RuntimeError, AttributeError):
-            # Widget is destroyed or invalid - silently ignore
+
             pass
 
     def toggle_antiafk(self, enable=None):
@@ -445,14 +441,13 @@ class AntiAFK:
 
         def enum_window_callback(hwnd, windows):
             try:
-                # If include_hidden is True, check all windows regardless of visibility
-                # If include_hidden is False, only check visible windows
+
                 if include_hidden or win32gui.IsWindowVisible(hwnd):
                     _, process_id = win32process.GetWindowThreadProcessId(hwnd)
                     process = psutil.Process(process_id)
                     if process.name().lower() == "robloxplayerbeta.exe":
                         title = win32gui.GetWindowText(hwnd)
-                        # Only include windows with "Roblox" in the title and exclude helper windows
+
                         if title and "Roblox" in title and not any(x in title for x in ["MSCTFIME", "Default IME", "NVIDIA"]):
                             windows.append(hwnd)
             except (psutil.NoSuchProcess, psutil.AccessDenied, Exception):
@@ -464,18 +459,18 @@ class AntiAFK:
 
     def show_roblox_windows(self):
         """Show all Roblox windows, similar to original code"""
-        # Find all Roblox windows, even hidden ones
+
         windows = self.find_roblox_windows(include_hidden=True)
 
         if not windows:
             self.update_status("No Roblox windows found")
             return
-            
+
         visible_count = 0
         for window in windows:
-            # Check if window is hidden or minimized
+
             if not win32gui.IsWindowVisible(window) or win32gui.IsIconic(window):
-                # First restore, then show (similar to original code)
+
                 if win32gui.IsIconic(window):
                     win32gui.ShowWindow(window, win32con.SW_RESTORE)
                 win32gui.ShowWindow(window, win32con.SW_SHOW)
@@ -493,7 +488,7 @@ class AntiAFK:
             return
 
         for window in windows:
-            # Hide the window while preserving its state
+
             win32gui.ShowWindow(window, win32con.SW_HIDE)
 
         self.update_status(f"Hid {len(windows)} Roblox window(s)")
@@ -502,126 +497,110 @@ class AntiAFK:
         """Perform an anti-AFK action on a specified window using direct Win32 API exactly like the C++ implementation"""
         if action_type is None:
             action_type = self.config.get('antiafk_action', 'space')
-            
-        # Verify the window is valid and actually a Roblox window
+
         if not win32gui.IsWindow(hwnd):
             self.update_status(f"Window {hwnd} is not a valid window")
             return False
-            
+
         window_title = win32gui.GetWindowText(hwnd)
         if not window_title or "Roblox" not in window_title or any(x in window_title for x in ["MSCTFIME", "Default IME"]):
             self.update_status(f"Window '{window_title}' is not a valid Roblox window")
             return False
 
-        # Store the original foreground window
         old_hwnd = win32gui.GetForegroundWindow()
         was_minimized = win32gui.IsIconic(hwnd)
-        
+
         try:
-            # Constants directly from C++ implementation
-            ACTION_DELAY = 30  # milliseconds
-            ALT_DELAY = 15     # milliseconds
-            
-            # Restore window if minimized (just like C++ implementation)
+
+            ACTION_DELAY = 30  
+            ALT_DELAY = 15     
+
             if was_minimized:
                 win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
-                
-            # Set foreground window (just like C++ implementation)
+
             win32gui.SetForegroundWindow(hwnd)
-            
-            # Use MapVirtualKey like the C++ implementation for more reliable key sending
+
             def map_virtual_key(vk_code):
-                # This is the Python equivalent of C++'s MapVirtualKey function
+
                 return ctypes.windll.user32.MapVirtualKeyW(vk_code, 0)
-                
-            # Pre-action delay (just like C++ implementation)
+
             time.sleep(ACTION_DELAY / 1000.0)
-            
-            # Perform the action with the exact same approach as the C++ code
+
             if action_type == 'space':
-                # Space key - EXACTLY like C++ implementation
-                vk_code = 0x20  # VK_SPACE
+
+                vk_code = 0x20  
                 scan_code = map_virtual_key(vk_code)
                 ctypes.windll.user32.keybd_event(vk_code, scan_code, 0, 0)
                 time.sleep(ALT_DELAY / 1000.0)
                 ctypes.windll.user32.keybd_event(vk_code, scan_code, win32con.KEYEVENTF_KEYUP, 0)
-            
+
             elif action_type == 'ws':
-                # W key - EXACTLY like C++ implementation
-                vk_code_w = ord('W')  # 0x57
+
+                vk_code_w = ord('W')  
                 scan_code_w = map_virtual_key(vk_code_w)
                 ctypes.windll.user32.keybd_event(vk_code_w, scan_code_w, 0, 0)
                 time.sleep(ALT_DELAY / 1000.0)
                 ctypes.windll.user32.keybd_event(vk_code_w, scan_code_w, win32con.KEYEVENTF_KEYUP, 0)
                 time.sleep(ALT_DELAY / 1000.0)
-                
-                # S key - EXACTLY like C++ implementation
-                vk_code_s = ord('S')  # 0x53
+
+                vk_code_s = ord('S')  
                 scan_code_s = map_virtual_key(vk_code_s)
                 ctypes.windll.user32.keybd_event(vk_code_s, scan_code_s, 0, 0)
                 time.sleep(ALT_DELAY / 1000.0)
                 ctypes.windll.user32.keybd_event(vk_code_s, scan_code_s, win32con.KEYEVENTF_KEYUP, 0)
-            
+
             elif action_type == 'zoom':
-                # I key - EXACTLY like C++ implementation
-                vk_code_i = ord('I')  # 0x49
+
+                vk_code_i = ord('I')  
                 scan_code_i = map_virtual_key(vk_code_i)
                 ctypes.windll.user32.keybd_event(vk_code_i, scan_code_i, 0, 0)
                 time.sleep(ALT_DELAY / 1000.0)
                 ctypes.windll.user32.keybd_event(vk_code_i, scan_code_i, win32con.KEYEVENTF_KEYUP, 0)
                 time.sleep(ALT_DELAY / 1000.0)
-                
-                # O key - EXACTLY like C++ implementation
-                vk_code_o = ord('O')  # 0x4F
+
+                vk_code_o = ord('O')  
                 scan_code_o = map_virtual_key(vk_code_o)
                 ctypes.windll.user32.keybd_event(vk_code_o, scan_code_o, 0, 0)
                 time.sleep(ALT_DELAY / 1000.0)
                 ctypes.windll.user32.keybd_event(vk_code_o, scan_code_o, win32con.KEYEVENTF_KEYUP, 0)
-            
-            # Post-action delay (just like C++ implementation)
+
             time.sleep(ACTION_DELAY / 1000.0)
-            
-            # Restore window state if needed (just like C++ implementation)
+
             if was_minimized:
                 win32gui.ShowWindow(hwnd, win32con.SW_MINIMIZE)
-                
-            # Restore original foreground window (just like C++ RestoreForegroundWindow function)
+
             if old_hwnd and old_hwnd != hwnd and win32gui.IsWindow(old_hwnd):
-                # Only proceed if window is visible and not minimized (just like C++ implementation)
+
                 if win32gui.IsWindowVisible(old_hwnd) and not win32gui.IsIconic(old_hwnd):
-                    # Make sure it's not our window (just like C++ implementation)
+
                     try:
                         class_name = win32gui.GetClassName(old_hwnd)
                         if class_name == "AntiAFK-RBX-tray":
                             return True
                     except:
                         pass
-                        
-                    # Follow the exact same sequence as the C++ implementation
+
                     win32gui.ShowWindow(old_hwnd, win32con.SW_SHOW)
                     win32gui.SetWindowPos(old_hwnd, win32con.HWND_TOPMOST, 0, 0, 0, 0, 
                                          win32con.SWP_NOMOVE | win32con.SWP_NOSIZE)
-                    
-                    # Attach threads for input synchronization (just like C++ implementation)
+
                     current_thread = win32api.GetCurrentThreadId()
                     foreground_thread = win32process.GetWindowThreadProcessId(old_hwnd)[0]
                     ctypes.windll.user32.AttachThreadInput(current_thread, foreground_thread, True)
-                    
+
                     win32gui.BringWindowToTop(old_hwnd)
                     win32gui.SetForegroundWindow(old_hwnd)
-                    
+
                     ctypes.windll.user32.AttachThreadInput(current_thread, foreground_thread, False)
-                    
-                    # Reset z-order (just like C++ implementation)
+
                     win32gui.SetWindowPos(old_hwnd, win32con.HWND_NOTOPMOST, 0, 0, 0, 0,
                                         win32con.SWP_NOMOVE | win32con.SWP_NOSIZE)
-            
+
             return True
-            
+
         except Exception as e:
             self.log_error(e, f"Error performing anti-AFK action on '{window_title}'")
-            
-            # Try to restore window state even if action failed
+
             try:
                 if was_minimized:
                     win32gui.ShowWindow(hwnd, win32con.SW_MINIMIZE)
@@ -629,7 +608,7 @@ class AntiAFK:
                     win32gui.SetForegroundWindow(old_hwnd)
             except Exception as restore_error:
                 self.log_error(restore_error, "Error restoring window state after action failure")
-                
+
             return False
 
     def test_action(self):
@@ -642,30 +621,27 @@ class AntiAFK:
 
         action_type = self.action_type_var.get()
         self.update_status(f"Testing {action_type} action on {len(windows)} Roblox window(s)...")
-        
-        # Store current foreground window to restore later
+
         old_hwnd = win32gui.GetForegroundWindow()
-        
+
         for i, window in enumerate(windows):
             try:
-                # Get window title for better diagnostics
+
                 title = win32gui.GetWindowText(window)
                 self.update_status(f"Testing on window: '{title}' (handle: {window})")
-                
-                # Perform 3 repetitions of the action to ensure it works
+
                 for j in range(3):
                     self.update_status(f"Action attempt {j+1}/3...")
                     if not self.perform_antiafk_action(window, action_type):
                         self.update_status("Action failed, aborting remaining attempts")
                         break
-                    time.sleep(0.5)  # Short delay between repetitions
+                    time.sleep(0.5)  
             except Exception as e:
                 self.log_error(e, f"Error testing anti-AFK action on window {window}")
-                
-        # Restore original foreground window
+
         if old_hwnd and win32gui.IsWindow(old_hwnd):
             win32gui.SetForegroundWindow(old_hwnd)
-            
+
         self.update_status(f"Completed testing {action_type} action on all windows")
 
     def start_antiafk(self):
@@ -711,53 +687,47 @@ class AntiAFK:
         try:
             self.update_status("Anti-AFK loop started")
 
-            interval = int(self.config.get('antiafk_interval', 120))  # Changed default from 180 to 120
+            interval = int(self.config.get('antiafk_interval', 120))  
             action_type = self.config.get('antiafk_action', 'space')
             user_safe = self.config.get('antiafk_user_safe', False)
             sequential_mode = self.config.get('antiafk_sequential_mode', False)
             sequential_delay = float(self.config.get('antiafk_sequential_delay', 0.75))
-            
-            # Increased maximum wait time to 19 minutes
-            MAX_WAIT_TIME = 1140  # 19 minutes (1140 seconds)
-            ACTIVITY_CHECK_INTERVAL = 1.0  # How often to check activity
-            
+
+            MAX_WAIT_TIME = 1140  
+            ACTIVITY_CHECK_INTERVAL = 1.0  
+
             self.update_status(f"Settings: Interval={interval}s, Action={action_type}, True-AFK={user_safe}, Sequential={sequential_mode}")
             if user_safe:
                 self.update_status(f"True-AFK mode: Will wait for inactivity or max {MAX_WAIT_TIME//60} minutes since last action")
-                # Assume inactive at start to ensure first action
+
                 self.user_active = False
 
-            # Initial state setup
-            last_action_time = time.time() - interval + 10  # Start almost ready to perform an action
+            last_action_time = time.time() - interval + 10  
             last_status_update_time = 0
-            
+
             while not self.antiafk_stop_event.is_set():
                 try:
                     current_time = time.time()
-                    
-                    # Get all Roblox windows
+
                     roblox_windows = self.find_roblox_windows(include_hidden=True)
-                    
+
                     if not roblox_windows:
-                        # Only update status every 10 seconds to avoid spam
+
                         if current_time - last_status_update_time > 10:
                             self.update_status("No Roblox windows found, waiting...")
                             last_status_update_time = current_time
-                            
+
                         if self.antiafk_stop_event.wait(timeout=5):
                             break
                         continue
 
-                    # Check if it's time to perform an action
                     perform_action = False
                     elapsed_time = current_time - last_action_time
-                    
-                    # Store the current foreground window for restoration later
+
                     current_foreground = win32gui.GetForegroundWindow()
 
-                    # Progress update every 30 seconds if True-AFK mode is enabled
                     if user_safe and current_time - last_status_update_time > 30:
-                        # Check user activity state
+
                         is_active = self.check_user_active()
                         if is_active:
                             inactive_time = 0
@@ -768,69 +738,60 @@ class AntiAFK:
                             self.update_status(f"User inactive for {int(inactive_time)}s. Action due in {max(0, int(interval - elapsed_time))}s.")
                         last_status_update_time = current_time
 
-                    # True-AFK mode logic
                     if user_safe:
-                        # Check activity less frequently to reduce overhead
+
                         is_active = elapsed_time % ACTIVITY_CHECK_INTERVAL < 0.1 and self.check_user_active()
-                        
+
                         if not is_active:
                             inactive_time = current_time - self.last_activity_time
-                            # Perform action if both conditions are met:
-                            # 1. User is inactive for at least 5 seconds
-                            # 2. Regular interval has elapsed
+
                             if inactive_time >= 5 and elapsed_time >= interval:
                                 self.update_status(f"User inactive for {int(inactive_time)}s and interval elapsed - performing action")
                                 perform_action = True
-                        
-                        # Safety net: if max wait time is reached, perform action regardless of activity
+
                         if elapsed_time >= MAX_WAIT_TIME:
                             self.update_status(f"Maximum wait time reached ({MAX_WAIT_TIME//60} min since last action) - performing action")
                             perform_action = True
                     else:
-                        # Regular timer-based logic
+
                         if elapsed_time >= interval:
                             perform_action = True
 
                     if perform_action:
                         windows_count = len(roblox_windows)
                         use_sequential = sequential_mode and windows_count >= 5
-                        
+
                         if use_sequential:
                             self.update_status(f"Performing SEQUENTIAL Anti-AFK actions on {windows_count} Roblox window(s)")
                         else:
                             self.update_status(f"Performing Anti-AFK action on {windows_count} Roblox window(s)")
-                        
+
                         action_success = True
                         if self.config.get('multi_instance_enabled', False):
-                            # Multi-instance mode - perform on all windows
+
                             for i, window in enumerate(roblox_windows):
                                 if not self.perform_antiafk_action(window, action_type):
                                     action_success = False
-                                
-                                # Sequential delay between windows if enabled
+
                                 if use_sequential and i < len(roblox_windows) - 1:
                                     time.sleep(sequential_delay)
                         else:
-                            # Single-instance mode - process only the first window
+
                             if roblox_windows:
                                 window = roblox_windows[0]
                                 if not self.perform_antiafk_action(window, action_type):
                                     action_success = False
-                                    
-                        # Restore the original foreground window
+
                         self.restore_foreground_window(current_foreground)
-                        
-                        # Reset tracking variables for next cycle
+
                         if action_success:
                             last_action_time = current_time
                             self.update_status("Anti-AFK action completed successfully")
-                            
-                            # After performing an action, wait a moment to prevent activity false positives
+
                             time.sleep(0.5)
                         else:
                             self.update_status("Anti-AFK action failed, will retry on next cycle")
 
-                    # Use shorter sleep periods to make stopping more responsive
                     if self.antiafk_stop_event.wait(timeout=1.0):
                         break
 
@@ -846,40 +807,35 @@ class AntiAFK:
             self.update_status(f"Critical error in Anti-AFK loop: {str(e)}")
         finally:
             self.antiafk_running = False
-            
+
     def restore_foreground_window(self, hwnd):
         """Restore the foreground window using the approach from the original code"""
         if not hwnd or not win32gui.IsWindow(hwnd):
             return
-            
-        # Check if it's our own window
+
         try:
             class_name = win32gui.GetClassName(hwnd)
             if class_name == "AntiAFK-RBX-tray":
                 return
         except:
             pass
-            
-        # Check if window is visible and not minimized
+
         if not win32gui.IsWindowVisible(hwnd) or win32gui.IsIconic(hwnd):
             return
-            
-        # Now restore focus using the same approach as the original
+
         win32gui.ShowWindow(hwnd, win32con.SW_SHOW)
         win32gui.SetWindowPos(hwnd, win32con.HWND_TOPMOST, 0, 0, 0, 0, 
                              win32con.SWP_NOMOVE | win32con.SWP_NOSIZE)
-                             
-        # Attach thread input for more reliable focus switching
+
         current_thread_id = win32api.GetCurrentThreadId()
         window_thread_id = win32process.GetWindowThreadProcessId(hwnd)[0]
         ctypes.windll.user32.AttachThreadInput(current_thread_id, window_thread_id, True)
-        
+
         win32gui.BringWindowToTop(hwnd)
         win32gui.SetForegroundWindow(hwnd)
-        
+
         ctypes.windll.user32.AttachThreadInput(current_thread_id, window_thread_id, False)
-        
-        # Reset the window z-order
+
         win32gui.SetWindowPos(hwnd, win32con.HWND_NOTOPMOST, 0, 0, 0, 0,
                              win32con.SWP_NOMOVE | win32con.SWP_NOSIZE)
 
@@ -908,21 +864,18 @@ class AntiAFK:
     def monitor_user_activity(self):
         """Thread function to monitor keyboard and mouse activity with improved reliability"""
         try:
-            # Increased inactivity threshold for more consistent detection
-            USER_INACTIVITY_WAIT = 5  # seconds (increased from 3)
-            MOUSE_POSITION_CHECK_INTERVAL = 0.5  # seconds
 
-            # Initialize as inactive
+            USER_INACTIVITY_WAIT = 5  
+            MOUSE_POSITION_CHECK_INTERVAL = 0.5  
+
             self.user_active = False
             self.last_activity_time = time.time()
             self.update_status("User activity monitoring started - True-AFK mode active")
 
-            # Track mouse position to detect mouse movement
             last_mouse_pos = win32gui.GetCursorPos()
             last_pos_check_time = time.time()
-            
-            # Track keyboard and mouse button states
-            mouse_buttons = [0x01, 0x02, 0x04]  # Left, right, middle buttons
+
+            mouse_buttons = [0x01, 0x02, 0x04]  
             last_button_states = {button: False for button in mouse_buttons}
             last_activity_logged = 0
             last_inactivity_logged = 0
@@ -931,27 +884,24 @@ class AntiAFK:
                 activity = False
                 current_time = time.time()
 
-                # 1. Check all keyboard keys
-                for key in [0x08, 0x09, 0x0D, 0x10, 0x11, 0x12, 0x20, 0x25, 0x26, 0x27, 0x28]:  # Common keys
+                for key in [0x08, 0x09, 0x0D, 0x10, 0x11, 0x12, 0x20, 0x25, 0x26, 0x27, 0x28]:  
                     if ctypes.windll.user32.GetAsyncKeyState(key) & 0x8000:
                         activity = True
                         break
-                
-                # Check letter and number keys if no activity found
+
                 if not activity:
-                    # Letters A-Z
+
                     for i in range(65, 91):
                         if ctypes.windll.user32.GetAsyncKeyState(i) & 0x8000:
                             activity = True
                             break
-                    # Numbers 0-9
+
                     if not activity:
                         for i in range(48, 58):
                             if ctypes.windll.user32.GetAsyncKeyState(i) & 0x8000:
                                 activity = True
                                 break
 
-                # 2. Check mouse buttons
                 if not activity:
                     for button in mouse_buttons:
                         button_state = ctypes.windll.user32.GetKeyState(button) & 0x8000
@@ -964,7 +914,6 @@ class AntiAFK:
                             activity = True
                             break
 
-                # 3. Check mouse movement periodically
                 if not activity and (current_time - last_pos_check_time) >= MOUSE_POSITION_CHECK_INTERVAL:
                     current_mouse_pos = win32gui.GetCursorPos()
                     if current_mouse_pos != last_mouse_pos:
@@ -972,7 +921,6 @@ class AntiAFK:
                     last_mouse_pos = current_mouse_pos
                     last_pos_check_time = current_time
 
-                # 4. Check for foreground window changes
                 try:
                     current_foreground = win32gui.GetForegroundWindow()
                     if not hasattr(self, 'last_foreground_window'):
@@ -982,31 +930,28 @@ class AntiAFK:
                         self.last_foreground_window = current_foreground
                 except:
                     pass
-                    
-                # Update activity status
+
                 if activity:
-                    # Update the last activity time
+
                     self.last_activity_time = current_time
-                    
-                    # Log activity change if previously inactive
+
                     if not self.user_active and (current_time - last_activity_logged) > 10:
                         self.update_status("User activity detected")
                         last_activity_logged = current_time
-                    
+
                     self.user_active = True
                 else:
-                    # Check if user has been inactive long enough
+
                     inactivity_time = current_time - self.last_activity_time
                     if inactivity_time >= USER_INACTIVITY_WAIT:
-                        # Only log inactivity if user was previously active
+
                         if self.user_active and (current_time - last_inactivity_logged) > 10:
                             self.update_status(f"User inactive for {int(inactivity_time)} seconds")
                             last_inactivity_logged = current_time
-                        
+
                         self.user_active = False
 
-                # Sleep less to be more responsive
-                time.sleep(0.02)  # 20ms sleep
+                time.sleep(0.02)  
 
         except Exception as e:
             self.log_error(e, "Error in activity monitoring thread")
@@ -1015,72 +960,64 @@ class AntiAFK:
     def check_user_active(self):
         """Enhanced check if the user is currently active"""
         try:
-            # Get current cursor position
+
             current_pos = win32gui.GetCursorPos()
-            
-            # Check if we have a stored previous position
+
             if hasattr(self, '_last_check_pos'):
-                # Mouse has moved since last check
+
                 if current_pos != self._last_check_pos:
                     self._last_check_pos = current_pos
                     return True
-            
-            # Store current position for next check
+
             self._last_check_pos = current_pos
-            
-            # Common keys people use in Roblox
+
             game_keys = [
-                0x20,  # Space (Jump)
-                0x57,  # W
-                0x41,  # A
-                0x53,  # S
-                0x44,  # D
-                0x45,  # E (Interact)
-                0x52,  # R (Reload)
-                0x51,  # Q (Ability)
-                0x46,  # F (Ability)
-                0x51,  # Q (Ability)
-                0x31, 0x32, 0x33, 0x34, 0x35, 0x36,  # Number keys 1-6
-                0x10,  # Shift (Sprint)
-                0x11,  # Ctrl (Crouch)
+                0x20,  
+                0x57,  
+                0x41,  
+                0x53,  
+                0x44,  
+                0x45,  
+                0x52,  
+                0x51,  
+                0x46,  
+                0x51,  
+                0x31, 0x32, 0x33, 0x34, 0x35, 0x36,  
+                0x10,  
+                0x11,  
             ]
-            
-            # Check common keys first for efficiency
+
             for key in game_keys:
                 if ctypes.windll.user32.GetAsyncKeyState(key) & 0x8000:
                     return True
-                    
-            # Check mouse buttons
-            mouse_buttons = [0x01, 0x02, 0x04]  # Left, right, middle buttons
+
+            mouse_buttons = [0x01, 0x02, 0x04]  
             for button in mouse_buttons:
                 if ctypes.windll.user32.GetKeyState(button) & 0x8000:
                     return True
 
-            # Check if the foreground window changed
             current_foreground = win32gui.GetForegroundWindow()
             if hasattr(self, '_last_check_foreground'):
                 if current_foreground != self._last_check_foreground:
                     self._last_check_foreground = current_foreground
                     return True
             self._last_check_foreground = current_foreground
-            
-            # No activity detected
+
             return False
         except Exception as e:
             self.log_error(e, "Error checking user activity")
-            # Default to inactive in case of error (to ensure anti-AFK works)
+
             return False
 
     def is_window_fullscreen(self, hwnd):
         """Check if a window is in fullscreen mode"""
         try:
-            # Get window and monitor info
+
             window_rect = win32gui.GetWindowRect(hwnd)
             monitor_info = win32api.GetMonitorInfo(win32api.MonitorFromWindow(hwnd))
             work_area = monitor_info.get("Work")
             monitor_area = monitor_info.get("Monitor")
-            
-            # If window covers the entire monitor (including taskbar area), it's likely fullscreen
+
             return window_rect == monitor_area and window_rect != work_area
         except Exception:
             return False
@@ -1090,12 +1027,12 @@ class AntiAFK:
         try:
             value = self.sequential_delay_var.get().strip()
             delay = float(value)
-            
+
             if delay < 0.1:
                 delay = 0.1
             elif delay > 5.0:
                 delay = 5.0
-                
+
             self.sequential_delay_var.set(str(delay))
             self.update_config()
         except ValueError:
@@ -1106,10 +1043,9 @@ class AntiAFK:
     def test_action_with_delay(self):
         """Test the Anti-AFK action with more thorough diagnostic output"""
         self.update_status("Starting Anti-AFK test with detailed diagnostics...")
-        
-        # Find all windows for more thorough analysis
+
         all_windows = []
-        
+
         def enum_window_callback(hwnd, result_list):
             if win32gui.IsWindow(hwnd):
                 try:
@@ -1121,62 +1057,55 @@ class AntiAFK:
                         process_name = process.name()
                     except:
                         process_name = "unknown"
-                    
+
                     if title and "Roblox" in title:
                         result_list.append((hwnd, title, pid, process_name))
                 except:
                     pass
             return True
-            
+
         win32gui.EnumWindows(enum_window_callback, all_windows)
-        
+
         if not all_windows:
             self.update_status("No windows with 'Roblox' in the title found!")
             return
-            
-        # Log all found windows for diagnosis
+
         self.update_status(f"Found {len(all_windows)} windows with 'Roblox' in title:")
         for hwnd, title, pid, process_name in all_windows:
             self.update_status(f"Window: '{title}' (handle: {hwnd}, process: {process_name}, PID: {pid})")
-        
-        # Filter to actual Roblox windows
+
         roblox_windows = []
         for hwnd, title, pid, process_name in all_windows:
             if process_name.lower() == "robloxplayerbeta.exe" and not any(x in title for x in ["MSCTFIME", "Default IME"]):
                 roblox_windows.append(hwnd)
-                
+
         if not roblox_windows:
             self.update_status("No main Roblox windows found after filtering!")
             return
-            
+
         self.update_status(f"Testing with {len(roblox_windows)} main Roblox window(s) in 3 seconds...")
-        
-        # Disable the test button temporarily
+
         self.test_btn.config(state="disabled")
-        
+
         def run_test():
             action_type = self.action_type_var.get()
             old_hwnd = win32gui.GetForegroundWindow()
-            
+
             for i, window in enumerate(roblox_windows):
                 window_title = win32gui.GetWindowText(window)
                 self.update_status(f"Testing on window {i+1}/{len(roblox_windows)}: '{window_title}'")
-                
-                # Try multiple approaches for each window
+
                 self.update_status("===== DIRECT METHOD WITH MapVirtualKey =====")
                 success1 = self.perform_antiafk_action(window, action_type)
                 time.sleep(0.5)
-                
-                # Log status after test
+
                 self.update_status("Test complete. Check if action was performed correctly.")
-                
-            # Restore original focus
+
             if old_hwnd and win32gui.IsWindow(old_hwnd):
                 win32gui.SetForegroundWindow(old_hwnd)
-                
-            # Re-enable the test button
+
             self.test_btn.config(state="normal")
-            
+
         self.status_text.after(3000, run_test)
 
     def set_interval(self, seconds):
@@ -1198,25 +1127,24 @@ class AntiAFK:
             self.interval_var.set(str(interval))
             self.update_config()
         except ValueError:
-            self.interval_var.set("120")  # Changed default from 180 to 120
+            self.interval_var.set("120")  
             self.update_config()
             self.update_status("Invalid interval value. Using default (120 seconds).")
 
     def shutdown(self):
         """Safely shut down the Anti-AFK system - used when application is closing"""
         try:
-            # Don't call stop_antiafk which tries to update the UI
-            # Just directly stop the threads
+
             if self.antiafk_running:
                 self.antiafk_stop_event.set()
                 if self.antiafk_thread and self.antiafk_thread.is_alive():
                     self.antiafk_thread.join(timeout=1.0)
                 self.antiafk_running = False
-                
+
             if self.monitor_thread_running:
                 self.monitor_thread_running = False
                 if self.monitor_thread and self.monitor_thread.is_alive():
                     self.monitor_thread.join(timeout=1.0)
         except Exception:
-            # Ignore any errors during shutdown
+
             pass

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.3-Testing2] - 2025-04-06
+
+### Added
+- Sub-second Biome detection for multiple accounts
+- Auto updater system complete rewrite
+- Minor bug fixes and performance improvements
+
 ## [1.0.3-Testing] - 2025-04-06
 
 ### Added
@@ -73,7 +80,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Session time tracking bugs
 - UI responsiveness in high DPI displays
 
-[Unreleased]: https://github.com/cresqnt-sys/BiomeScope/compare/v1.0.3-Testing...HEAD
+[Unreleased]: https://github.com/cresqnt-sys/BiomeScope/compare/v1.0.3-Testing2...HEAD
+[1.0.3-Testing2]: https://github.com/cresqnt-sys/BiomeScope/compare/v1.0.3-Testing...v1.0.3-Testing2
 [1.0.3-Testing]: https://github.com/cresqnt-sys/BiomeScope/compare/v1.0.2-Beta...v1.0.3-Testing
 [1.0.2-Hotfix]: https://github.com/cresqnt-sys/BiomeScope/compare/v1.0.2-Beta...v1.0.2-Hotfix
 [1.0.2-Beta]: https://github.com/cresqnt-sys/BiomeScope/compare/v1.0.1-Hotfix...v1.0.2-Beta
