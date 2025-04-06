@@ -7,7 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.0.2-Beta] - 2025-04-15
+## [1.0.3-Testing] - 2025-04-06
+
+### Added
+- Configurable biome notifications with customizable settings
+- Sequential mode for Anti-AFK system
+- Improved account detection with enhanced reliability
+- Fixed most if all past reported bugs
+- Reworked webhook checking and sending
+- Improved resource usage
+
+### Changed
+- Complete Anti-AFK system rewrite for better performance and stability
+
+## [1.0.2-Beta] - 2025-04-02
 
 ### Added
 - Private Server link in Discord webhook embeds
@@ -59,7 +72,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Session time tracking bugs
 - UI responsiveness in high DPI displays
 
-[Unreleased]: https://github.com/cresqnt-sys/BiomeScope/compare/v1.0.2-Hotfix...HEAD
+[Unreleased]: https://github.com/cresqnt-sys/BiomeScope/compare/v1.0.3-Testing...HEAD
+[1.0.3-Testing]: https://github.com/cresqnt-sys/BiomeScope/compare/v1.0.2-Beta...v1.0.3-Testing
 [1.0.2-Hotfix]: https://github.com/cresqnt-sys/BiomeScope/compare/v1.0.2-Beta...v1.0.2-Hotfix
 [1.0.2-Beta]: https://github.com/cresqnt-sys/BiomeScope/compare/v1.0.1-Hotfix...v1.0.2-Beta
 [1.0.1-Hotfix]: https://github.com/cresqnt-sys/BiomeScope/compare/v1.0.1-Beta...v1.0.1-Hotfix
