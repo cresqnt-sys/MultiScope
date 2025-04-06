@@ -88,7 +88,7 @@ class BiomePresence():
         except locale.Error:
             locale.setlocale(locale.LC_ALL, '')
 
-        self.version = "1.0.2-Beta"
+        self.version = "1.0.3-Stable"
 
         self.appdata_dir = os.path.join(os.getenv('APPDATA'), 'BiomeScope')
         os.makedirs(self.appdata_dir, exist_ok=True)
