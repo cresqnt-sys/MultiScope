@@ -16,6 +16,16 @@ A hard-fork of Noteab's Noteab Macro.
 
 ## 🚀 Getting Started
 
+### Prerequisites for .EXE
+- YOU ARE HIGHLY RECCOMENDED TO DO THE FOLLOWING:
+ - Use Fishstrap and enable Player Join Logs
+ - OR add this FFlag into Bloxstrap:
+    ``` 
+    {
+    "FStringDebugLuaLogLevel": "trace",
+    "FStringDebugLuaLogPattern": "ExpChat/mountClientApp"
+    }
+
 ### Prerequisites
 OR JUST USE THE EXE FILE IN RELEASES!!! (Bloxstrap still required)
 - Python
