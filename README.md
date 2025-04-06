@@ -11,29 +11,27 @@ A hard-fork of Noteab's Noteab Macro.
 - Multi Webhook Support
 - Better Error Handling
 - Better timed embeds
+- Automatic Feature Flag Configuration
 - More to come
 
 
 ## 🚀 Getting Started
 
-### Prerequisites for .EXE
-- YOU ARE HIGHLY RECCOMENDED TO DO THE FOLLOWING:
- - Use Fishstrap and enable Player Join Logs
- - OR add this FFlag into Bloxstrap:
-    ``` 
-    {
-    "FStringDebugLuaLogLevel": "trace",
-    "FStringDebugLuaLogPattern": "ExpChat/mountClientApp"
-    }
-
 ### Prerequisites
-OR JUST USE THE EXE FILE IN RELEASES!!! (Bloxstrap still required)
-- Python
-- Git (for cloning the repository)
-- Bloxstrap (RPC REQUIRED | Multi-Instance Optional)
+- Roblox (must be closed during first launch)
+- Bloxstrap (Multi-Instance Optional)
+
+BiomeScope will automatically configure all necessary feature flags for optimal performance. You don't need to manually set any flags!
 
 ### Installation
 
+#### Option 1: Use the Release (Recommended)
+1. Download the latest release from the [Releases](https://github.com/cresqnt-sys/BiomeScope/releases) page
+2. Close all Roblox instances
+3. Run BiomeScope
+4. Follow the first-time setup instructions
+
+#### Option 2: Manual Installation
 1. Clone the repository:
 ```bash
 git clone https://github.com/cresqnt-sys/BiomeScope.git
@@ -45,8 +43,12 @@ cd BiomeScope
 pip install -r requirements.txt
 ```
 
-3. Have fun!
+3. Close all Roblox instances and run BiomeScope
 
+### Important Notes
+- Close all Roblox instances before first launch
+- BiomeScope will automatically configure feature flags for all Roblox installations
+- No manual configuration required
 
 ## 📝 License
 

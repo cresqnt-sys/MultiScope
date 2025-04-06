@@ -65,7 +65,7 @@ class AntiAFK:
         info_frame.pack(fill=tk.X, padx=10, pady=10)
 
         description = ("Anti-AFK functionality keeps your Roblox windows active even when the window isn't focused.\n"
-                      "This will work on all Roblox instances automatically.")
+                      "This will work on all Roblox instances automatically. You might have to run as admin.")
         desc_label = ttk.Label(info_frame, text=description, wraplength=650)
         desc_label.pack(anchor="w", padx=10, pady=10)
 
@@ -209,45 +209,84 @@ class AntiAFK:
 
         self.update_status("Anti-AFK tab initialized. Use the buttons above to control the functionality.")
 
-        if hasattr(self.parent, 'config') and not self.parent.config.get('antiafk_first_launch_shown', False):
-
+        if hasattr(self.parent, 'config') and not self.parent.config.get('tutorial_shown', False):
             if hasattr(self.parent, 'config'):
-                self.parent.config['antiafk_first_launch_shown'] = True
+                self.parent.config['tutorial_shown'] = True
                 self.parent.save_config()
             self.show_first_launch_instructions()
 
         return frame
 
     def show_first_launch_instructions(self):
-        """Show first launch instructions for Anti-AFK and multi-instance support"""
+        """Show first launch instructions for all BiomeScope features"""
         instructions = (
-            "Anti-AFK First Launch Instructions\n"
-            "-----------------------------------\n"
-            "1. IMPORTANT: Always open this macro BEFORE launching Roblox\n"
-            "2. Anti-AFK keeps your Roblox character active by periodically sending key presses\n"
-            "3. This will automatically work on all your Roblox instances\n"
-            "4. True-AFK Mode waits for you to be inactive before performing actions. If you are active for too long you will be notified and an action will be performed regardless.\n\n"
-            "To use:\n"
-            "- Check 'Enable Anti-AFK' to start the anti-AFK functionality\n"
-            "- Select an Action Type: Space (jump), W/S (movement), or Zoom (camera)\n"
-            "- Use 'Show/Hide Roblox' buttons to manage window visibility, it will seem like roblox closed but it runs in the background (You can verify by checking your task manager)\n"
-            "- The 'Test' button lets you verify the anti-AFK action works\n\n"
-            "The default interval is set to 2 minutes for optimal anti-AFK performance.\n\n"
-            "This message will only appear once."
+            "BiomeScope - First Launch Instructions - PLEASE READ THIS\n"
+            "--------------------------------------\n"
+            "IMPORTANT SETUP:\n"
+            "1. Always open BiomeScope BEFORE launching Roblox (!!! NOT START!!!)\n"
+            "2. BiomeScope will automatically configure feature flags for optimal detection\n"
+            "3. These settings enhance your experience by enabling detailed logging\n"
+            "\nBIOME DETECTION:\n"
+            "- BiomeScope automatically detects biomes in Sols and sends Discord notifications\n"
+            "- Press F1 to start detection and F2 to stop\n"
+            "- Configure which biomes to be notified about in the Biome Settings\n"
+            "- Multi-account support allows monitoring all your accounts simultaneously\n"
+            "\nWEBHOOK NOTIFICATIONS:\n"
+            "- Set up Discord webhooks in the Webhook tab\n"
+            "- You can add multiple webhooks for different channels/servers\n"
+            "- Each webhook can be configured to notify for specific accounts\n"
+            "\nANTI-AFK SYSTEM:\n"
+            "- Anti-AFK keeps your Roblox character active by periodically sending key presses\n"
+            "- This will automatically work on all your Roblox instances\n"
+            "- True-AFK Mode waits for you to be inactive before performing actions\n"
+            "- To use Anti-AFK:\n"
+            "  • Check 'Enable Anti-AFK' to start the functionality\n"
+            "  • Select an Action Type: Space (jump), W/S (movement), or Zoom (camera)\n"
+            "  • Use 'Show/Hide Roblox' buttons to manage window visibility\n"
+            "  • The 'Test' button lets you verify the anti-AFK action works\n"
+            "\nFEATURE FLAGS (AUTOMATIC):\n"
+            "- BiomeScope automatically sets these feature flags for all Roblox installations:\n"
+            "  • FStringDebugLuaLogLevel: trace\n"
+            "  • FStringDebugLuaLogPattern: ExpChat/mountClientApp\n"
+            "- These settings are required for optimal biome detection\n"
+            "- No manual configuration needed\n"
+            "\nGETTING STARTED:\n"
+            "- Add your accounts in the Accounts Manager\n"
+            "- Configure your Discord webhooks\n"
+            "- Enable Anti-AFK if needed\n"
+            "- Start detection with F1\n"
+            "\nThis message will only appear once."
         )
 
         popup = tk.Toplevel()
-        popup.title("Anti-AFK First Launch Instructions")
-        popup.geometry("600x400")
+        popup.title("BiomeScope - First Launch Instructions")
+        popup.geometry("700x600")
         popup.grab_set()  
 
-        text = tk.Text(popup, wrap="word", padx=10, pady=10)
+        frame = ttk.Frame(popup)
+        frame.pack(fill="both", expand=True, padx=5, pady=5)
+
+        scrollbar = ttk.Scrollbar(frame)
+        scrollbar.pack(side="right", fill="y")
+
+        text = tk.Text(frame, wrap="word", padx=10, pady=10, yscrollcommand=scrollbar.set)
         text.pack(fill="both", expand=True)
+        scrollbar.config(command=text.yview)
+
         text.insert("1.0", instructions)
         text.config(state="disabled")
 
         ok_button = ttk.Button(popup, text="OK", command=popup.destroy)
         ok_button.pack(pady=10)
+
+        popup.update_idletasks()
+        width = popup.winfo_width()
+        height = popup.winfo_height()
+        x = (popup.winfo_screenwidth() // 2) - (width // 2)
+        y = (popup.winfo_screenheight() // 2) - (height // 2)
+        popup.geometry('{}x{}+{}+{}'.format(width, height, x, y))
+
+        popup.attributes('-topmost', True)
 
     def update_config(self):
         """Update configuration based on current UI settings"""
@@ -274,6 +313,10 @@ class AntiAFK:
                 except ValueError:
                     self.config['antiafk_sequential_delay'] = 0.75
                     self.sequential_delay_var.set("0.75")
+
+            if hasattr(self.parent, 'config'):
+                for key, value in self.config.items():
+                    self.parent.config[key] = value
 
             self.parent.save_config()
 

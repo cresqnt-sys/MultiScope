@@ -6,9 +6,11 @@ import ctypes
 import sys
 import copy
 import concurrent.futures
+import shutil
+import winreg
 
 if hasattr(sys, 'frozen'):  
-    myappid = 'BiomeScope.App.1.0.3.Testing2'
+    myappid = 'BiomeScope.App.1.0.3.Stable'
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
 
 try:
@@ -86,13 +88,20 @@ class BiomePresence():
         except locale.Error:
             locale.setlocale(locale.LC_ALL, '')
 
-        self.version = "1.0.3-Testing2"
+        self.version = "1.0.3-Stable"
+
+        self.appdata_dir = os.path.join(os.getenv('APPDATA'), 'BiomeScope')
+        os.makedirs(self.appdata_dir, exist_ok=True)
 
         self.logs_dir = os.path.join(os.getenv('LOCALAPPDATA'), 'Roblox', 'logs')
+
+        self.logs = self.load_logs()
 
         self.biome_data = self.load_biome_data()
         self.config = self.load_config()
         self.auras_data = self.load_auras_json()
+
+        self.setup_feature_flags()
 
         if "enable_aura_detection" not in self.config:
             self.config["enable_aura_detection"] = False
@@ -136,7 +145,6 @@ class BiomePresence():
         self.detection_running = False
         self.detection_thread = None
         self.lock = threading.Lock()
-        self.logs = self.load_logs()
 
         self.last_br_time = datetime.min
         self.last_sc_time = datetime.min
@@ -156,6 +164,102 @@ class BiomePresence():
 
         self.recent_errors = {}
         self.max_error_repeat = 5  
+
+    def setup_feature_flags(self):
+        """Set up Roblox feature flags for enhanced functionality"""
+        try:
+            feature_flags = {
+                "FStringDebugLuaLogLevel": "trace",
+                "FStringDebugLuaLogPattern": "ExpChat/mountClientApp"
+            }
+
+            roblox_versions = set()  
+
+            registry_paths = [
+                (winreg.HKEY_CURRENT_USER, r"Software\Roblox\RobloxStudioBrowser\roblox.com"),
+                (winreg.HKEY_LOCAL_MACHINE, r"Software\Roblox\Roblox"),
+                (winreg.HKEY_LOCAL_MACHINE, r"Software\WOW6432Node\Roblox\Roblox")
+            ]
+
+            for hkey, path in registry_paths:
+                try:
+                    with winreg.OpenKey(hkey, path, 0, winreg.KEY_READ) as key:
+                        try:
+                            version_path = os.path.dirname(winreg.QueryValueEx(key, "LastInstallPath")[0])
+                            if os.path.exists(version_path):
+                                roblox_versions.add(version_path)
+                        except WindowsError:
+                            pass
+                except WindowsError:
+                    pass
+
+            program_files_paths = [
+                os.path.join(os.environ.get('PROGRAMFILES', ''), 'Roblox', 'Versions'),
+                os.path.join(os.environ.get('PROGRAMFILES(X86)', ''), 'Roblox', 'Versions'),
+                os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Roblox', 'Versions'),
+
+                os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Bloxstrap', 'Versions'),
+                os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Fishstrap', 'Versions')
+            ]
+
+            for base_path in program_files_paths:
+                if os.path.exists(base_path):
+                    self.append_log(f"Checking for Roblox installations in: {base_path}")
+                    for folder in os.listdir(base_path):
+                        full_path = os.path.join(base_path, folder)
+                        if os.path.isdir(full_path):
+
+                            exe_files = ['RobloxPlayerBeta.exe', 'RobloxStudioBeta.exe', 'RobloxPlayer.exe']
+                            if any(os.path.exists(os.path.join(full_path, exe)) for exe in exe_files):
+                                roblox_versions.add(full_path)
+                                self.append_log(f"Found Roblox installation: {full_path}")
+
+            if not roblox_versions:
+                self.append_log("No Roblox installations found")
+                return
+
+            self.append_log(f"Found {len(roblox_versions)} Roblox installation(s)")
+
+            for version_path in roblox_versions:
+                try:
+
+                    client_settings_path = os.path.join(version_path, 'ClientSettings')
+                    os.makedirs(client_settings_path, exist_ok=True)
+
+                    settings_file = os.path.join(client_settings_path, 'ClientAppSettings.json')
+
+                    try:
+                        if os.path.exists(settings_file):
+                            with open(settings_file, 'r') as f:
+                                settings = json.load(f)
+                        else:
+                            settings = {}
+                    except json.JSONDecodeError:
+                        settings = {}
+
+                    needs_update = False
+                    for flag, value in feature_flags.items():
+                        if settings.get(flag) != value:
+                            needs_update = True
+                            settings[flag] = value
+
+                    if needs_update:
+
+                        if os.path.exists(settings_file):
+                            os.chmod(settings_file, 0o666)
+
+                        with open(settings_file, 'w') as f:
+                            json.dump(settings, f, indent=4)
+
+                        self.append_log(f"Updated feature flags in {version_path}")
+                    else:
+                        self.append_log(f"Feature flags already up to date in {version_path}")
+
+                except Exception as e:
+                    self.error_logging(e, f"Error updating feature flags in {version_path}")
+
+        except Exception as e:
+            self.error_logging(e, "Error setting up feature flags")
 
     def check_all_accounts_biomes_at_once(self):
         """Check all accounts' logs for biomes in parallel"""
@@ -566,255 +670,282 @@ class BiomePresence():
             return 0
 
     def append_log(self, message):
-        """Add a message to the logs list and display it"""
-        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        log_entry = f"[{timestamp}] {message}"
-
-        if not hasattr(self, 'logs'):
-            self.logs = []
+        """Append a log message to the logs list in JSON format"""
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        log_entry = {
+            "message": message,
+            "timestamp": timestamp
+        }
 
         self.logs.append(log_entry)
 
-        if hasattr(self, 'logs_text') and self.logs_text:
-            try:
-                self.display_logs()
-            except Exception:
-                pass  
-
-        important_keywords = ["Error", "Warning", "⚠️", "Started", "Stopped", "Detected", "Found biome", 
-                             "PLAYER DETECTED", "PLAYER CONFIRMED", "PLAYER LINKED", "PLAYER REASSIGNED", "NEW LOGS DETECTED", "INITIAL SCAN"]
+        important_keywords = ["BIOME DETECTED", "BIOME CHANGED", "BIOME FOUND",
+                            "PLAYER DETECTED", "PLAYER CONFIRMED", "PLAYER LINKED", 
+                            "PLAYER REASSIGNED", "NEW LOGS DETECTED", "INITIAL SCAN"]
         should_print = any(keyword in message for keyword in important_keywords)
 
         if should_print:
-            print(log_entry)
+            print(f"[{timestamp}] {message}")
 
     def load_logs(self):
-        """Load logs from previous sessions"""
-        if os.path.exists('macro_logs.txt'):
-            with open('macro_logs.txt', 'r') as file:
-                lines = file.read().splitlines()
-                return lines
-        return []
+        """Load logs from AppData directory"""
+        try:
+            logs_path = os.path.join(self.appdata_dir, "biome_logs.json")
+
+            if os.path.exists(logs_path):
+                with open(logs_path, "r") as file:
+                    return json.load(file)
+
+            legacy_logs_path = 'macro_logs.txt'
+            if os.path.exists(legacy_logs_path):
+                with open(legacy_logs_path, 'r') as file:
+                    lines = file.read().splitlines()
+
+                    json_logs = [{"message": line, "timestamp": ""} for line in lines]
+
+                    with open(logs_path, "w") as file:
+                        json.dump(json_logs, file, indent=4)
+
+                    print(f"Migrated logs from {legacy_logs_path} to {logs_path}")
+                    return json_logs
+
+            return []
+        except Exception as e:
+            self.error_logging(e, "Error loading logs from AppData directory")
+            return []
 
     def load_biome_data(self):
-        biomes_paths = [
-            "biomes_data.json",
-            "source_code/biomes_data.json",
-            os.path.join(os.path.dirname(__file__), "biomes_data.json"),
-            os.path.join(os.path.dirname(__file__), "source_code/biomes_data.json")
-        ]
-
-        default_biome_data = {
-            "WINDY": {
-                "color": "0x9ae5ff",
-                "thumbnail_url": "https://i.postimg.cc/6qPH4wy6/image.png"
-            },
-            "RAINY": {
-                "color": "0x027cbd",
-                "thumbnail_url": "https://static.wikia.nocookie.net/sol-rng/images/e/ec/Rainy.png"
-            },
-            "SNOWY": {
-                "color": "0xDceff9",
-                "thumbnail_url": "https://static.wikia.nocookie.net/sol-rng/images/3/36/Snowy.png"
-            },
-            "SAND STORM": {
-                "color": "0x8F7057",
-                "thumbnail_url": "https://i.postimg.cc/3JyL25Kz/image.png"
-            },
-            "HELL": {
-                "color": "0xff4719",
-                "thumbnail_url": "https://i.postimg.cc/hGC5xNyY/image.png"
-            },
-            "STARFALL": {
-                "color": "0x011ab7",
-                "thumbnail_url": "https://i.postimg.cc/1t0dY4J8/image.png"
-            },
-            "CORRUPTION": {
-                "color": "0x6d32a8",
-                "thumbnail_url": "https://i.postimg.cc/ncZQ84Dh/image.png"
-            },
-            "NULL": {
-                "color": "0x838383",
-                "thumbnail_url": "https://static.wikia.nocookie.net/sol-rng/images/f/fc/NULLLL.png"
-            },
-            "GLITCHED": {
-                "color": "0xbfff00",
-                "thumbnail_url": "https://i.postimg.cc/W3Lhtn5g/image.png"
-            },
-
-            "DREAMSPACE": {
-                "color": "0xea9dda",
-                "thumbnail_url": "https://i.postimg.cc/rFjCcW3w/image.png"
-            }
-        }
-
         try:
-            for path in biomes_paths:
-                if os.path.exists(path):
-                    with open(path, "r") as file:
-                        biome_data = json.load(file)
-                        return biome_data
+
+            appdata_biomes_path = os.path.join(self.appdata_dir, "biomes_data.json")
+
+            legacy_paths = [
+                "biomes_data.json",
+                os.path.join(os.path.dirname(__file__), "biomes_data.json")
+            ]
+
+            if os.path.exists(appdata_biomes_path):
+                with open(appdata_biomes_path, "r") as file:
+                    return json.load(file)
+            else:
+
+                for path in legacy_paths:
+                    if os.path.exists(path):
+                        with open(path, "r") as file:
+                            biome_data = json.load(file)
+
+                            with open(appdata_biomes_path, "w") as file:
+                                json.dump(biome_data, file, indent=4)
+                            print(f"Migrated biomes_data.json from {path} to {appdata_biomes_path}")
+                            return biome_data
+
+            default_data = {
+                "WINDY": {"emoji": "🌀", "color": "16777215"},
+                "RAINY": {"emoji": "🌧️", "color": "5592575"},
+                "SNOWY": {"emoji": "❄️", "color": "16777215"},
+                "SAND STORM": {"emoji": "🏜️", "color": "16755200"},
+                "HELL": {"emoji": "🔥", "color": "16525609"},
+                "STARFALL": {"emoji": "🌠", "color": "16777215"},
+                "CORRUPTION": {"emoji": "🌑", "color": "8388736"},
+                "NULL": {"emoji": "🌫️", "color": "8421504"},
+                "GLITCHED": {"emoji": "⚠️", "color": "16776960"},
+                "DREAMSPACE": {"emoji": "💤", "color": "16711935"},
+                "NORMAL": {"emoji": "🌳", "color": "65280"}
+            }
+
+            with open(appdata_biomes_path, "w") as file:
+                json.dump(default_data, file, indent=4)
+
+            return default_data
         except Exception as e:
-            print(f"Error loading biomes_data.json: {e}")
-            self.error_logging(e, f"Error loading biomes_data.json")
-
-        with open("biomes_data.json", "w") as file:
-            json.dump(default_biome_data, file, indent=4)
-            print("Default biomes_data.json created.")
-
-        return default_biome_data
+            self.error_logging(e, "Failed to load biomes_data.json, using default values")
+            return {
+                "WINDY": {"emoji": "🌀", "color": "16777215"},
+                "RAINY": {"emoji": "🌧️", "color": "5592575"},
+                "SNOWY": {"emoji": "❄️", "color": "16777215"},
+                "SAND STORM": {"emoji": "🏜️", "color": "16755200"},
+                "HELL": {"emoji": "🔥", "color": "16525609"},
+                "STARFALL": {"emoji": "🌠", "color": "16777215"},
+                "CORRUPTION": {"emoji": "🌑", "color": "8388736"},
+                "NULL": {"emoji": "🌫️", "color": "8421504"},
+                "GLITCHED": {"emoji": "⚠️", "color": "16776960"},
+                "DREAMSPACE": {"emoji": "💤", "color": "16711935"},
+                "NORMAL": {"emoji": "🌳", "color": "65280"}
+            }
 
     def load_auras_json(self):
-        """Load auras data from JSON - Simplified for core version"""
-        return {}
+        """Load auras data from AppData directory"""
+        try:
+
+            appdata_auras_path = os.path.join(self.appdata_dir, "auras.json")
+
+            if os.path.exists(appdata_auras_path):
+                with open(appdata_auras_path, "r") as file:
+                    return json.load(file)
+
+            legacy_auras_path = "auras.json"
+            if os.path.exists(legacy_auras_path):
+                with open(legacy_auras_path, "r") as file:
+                    auras_data = json.load(file)
+
+                with open(appdata_auras_path, "w") as file:
+                    json.dump(auras_data, file, indent=4)
+                print(f"Migrated auras.json to {appdata_auras_path}")
+                return auras_data
+
+            default_data = {}
+            with open(appdata_auras_path, "w") as file:
+                json.dump(default_data, file, indent=4)
+
+            return default_data
+        except Exception as e:
+            self.error_logging(e, "Failed to load auras.json, using empty dictionary")
+            return {}
 
     def error_logging(self, exception, custom_message=None, max_log_size=3 * 1024 * 1024):
-        log_file = "error_logs.txt"
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        error_type = type(exception).__name__
-        error_message = str(exception)
-        stack_trace = traceback.format_exc()
+        """Log errors to a file in the AppData directory"""
+        try:
+            error_log_path = os.path.join(self.appdata_dir, "error_logs.txt")
 
-        error_key = f"{error_type}:{error_message}"
-        if custom_message:
-            error_key += f":{custom_message}"
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            error_message = f"[{timestamp}] {custom_message if custom_message else 'ERROR'}: {str(exception)}\n"
+            error_message += f"Traceback:\n{traceback.format_exc()}\n"
 
-        if not hasattr(self, 'recent_errors'):
-            self.recent_errors = {}
-            self.max_error_repeat = 5
+            print(error_message)
 
-        current_time = time.time()
+            try:
+                if os.path.exists(error_log_path) and os.path.getsize(error_log_path) > max_log_size:
 
-        self.recent_errors = {k: v for k, v in self.recent_errors.items() 
-                             if current_time - v['last_time'] < 900}
+                    backup_path = os.path.join(self.appdata_dir, f"error_logs_backup_{int(time.time())}.txt")
+                    shutil.copy2(error_log_path, backup_path)
 
-        if error_key in self.recent_errors:
-            self.recent_errors[error_key]['count'] += 1
-            self.recent_errors[error_key]['last_time'] = current_time
-        else:
-            self.recent_errors[error_key] = {'count': 1, 'last_time': current_time}
+                    with open(error_log_path, "w") as f:
+                        f.write(f"[{timestamp}] Log file rotated due to size limit\n")
+                        f.write(error_message)
+                else:
 
-        if not os.path.exists(log_file):
-            with open(log_file, "w") as log:
-                log.write("Error Log File Created\n")
-                log.write("-" * 40 + "\n")
+                    with open(error_log_path, "a") as f:
+                        f.write(error_message)
+            except Exception as log_error:
+                print(f"Failed to write to error log: {str(log_error)}")
 
-        if os.path.exists(log_file) and os.path.getsize(log_file) > max_log_size:
-            with open(log_file, "r") as log:
-                lines = log.readlines()
-            with open(log_file, "w") as log:
-                log.writelines(lines[-1000:])
-
-        with open(log_file, "a") as log:
-            log.write(f"\n[{timestamp}] ERROR LOG\n")
-            log.write(f"Error Type: {error_type}\n")
-            log.write(f"Error Message: {error_message}\n")
-            if custom_message:
-                log.write(f"Custom Message: {custom_message}\n")
-            log.write(f"Traceback:\n{stack_trace}\n")
-            log.write("-" * 40 + "\n")
-
-        minor_errors = [
-            "No such file or directory",
-            "File not found",
-            "FileNotFoundError",
-            "WinError 2",
-            "Log file not found",
-            "Could not open log file",
-            "Error checking for Player added"
-        ]
-
-        is_minor = any(err in str(exception) or (custom_message and err in custom_message) for err in minor_errors)
-
-        if not is_minor and self.recent_errors[error_key]['count'] <= self.max_error_repeat:
-            if self.recent_errors[error_key]['count'] == self.max_error_repeat:
-                print(f"Error logged to {log_file}. (Further occurrences will be suppressed)")
-            else:
-                print(f"Error logged to {log_file}.")
+        except Exception as e:
+            print(f"Error in error_logging: {str(e)}")
 
     def save_logs(self):
-        log_file_path = 'macro_logs.txt'
+        """Save logs to AppData directory."""
+        try:
+            logs_path = os.path.join(self.appdata_dir, "biome_logs.json")
 
-        if os.path.exists(log_file_path) and os.path.getsize(log_file_path) > 2 * 1024 * 1024:
-            with open(log_file_path, 'w') as file:
-                file.write("")
-        else:
-            with open(log_file_path, 'a') as file:
-                for log in self.logs:
-                    file.write(log + "\n")
+            sorted_logs = sorted(self.logs, key=lambda x: x.get("timestamp", ""), reverse=True)
+
+            with open(logs_path, "w") as file:
+                json.dump(sorted_logs, file, indent=4)
+        except Exception as e:
+            self.error_logging(e, "Error saving logs to AppData directory")
 
     def save_config(self):
-        """Save configuration to file - simplified version"""
+        """Save configuration to file"""
         try:
-            with open("config.json", "r") as file:
-                config = json.load(file)
-        except FileNotFoundError:
-            config = {}
 
-        session_time = self.get_total_session_time()
+            config_dir = os.path.join(os.getenv('APPDATA'), 'BiomeScope')
+            os.makedirs(config_dir, exist_ok=True)
+            config_path = os.path.join(config_dir, "config.json")
 
-        if hasattr(self, 'webhook_entries'):
-            webhooks = []
-            for entry in self.webhook_entries:
-                url = entry["url_entry"].get().strip()
-                if url:  
-                    webhook_data = {
-                        "url": url, 
-                        "user_id": ""
-                    }
+            try:
+                with open(config_path, "r") as file:
+                    config = json.load(file)
+            except FileNotFoundError:
+                config = {}
 
-                    if not entry["notify_all_accounts"].get() and entry["account_notifications"]:
-                        webhook_data["account_notifications"] = entry["account_notifications"]
-                    webhooks.append(webhook_data)
-            config["webhooks"] = webhooks
+            session_time = self.get_total_session_time()
 
-        if hasattr(self, 'variables'):
-            biome_notifier = {}
-            for biome, var in self.variables.items():
-                biome_notifier[biome] = var.get()
-            config["biome_notifier"] = biome_notifier
+            if hasattr(self, 'webhook_entries'):
+                webhooks = []
+                for entry in self.webhook_entries:
+                    url = entry["url_entry"].get().strip()
+                    if url:  
+                        webhook_data = {
+                            "url": url, 
+                            "user_id": ""
+                        }
 
-        if 'antiafk_first_launch_shown' in self.config:
-            config['antiafk_first_launch_shown'] = self.config['antiafk_first_launch_shown']
+                        if not entry["notify_all_accounts"].get() and entry["account_notifications"]:
+                            webhook_data["account_notifications"] = entry["account_notifications"]
+                        webhooks.append(webhook_data)
+                config["webhooks"] = webhooks
 
-        if 'biome_notification_enabled' in self.config:
-            config['biome_notification_enabled'] = self.config['biome_notification_enabled']
+            if hasattr(self, 'variables'):
+                biome_notifier = {}
+                for biome, var in self.variables.items():
+                    biome_notifier[biome] = var.get()
+                config["biome_notifier"] = biome_notifier
 
-        config.update({
-            "biome_counts": self.biome_counts,
-            "session_time": session_time,
-            "accounts": self.accounts
-        })
+            if 'tutorial_shown' in self.config:
+                config['tutorial_shown'] = self.config['tutorial_shown']
 
-        with open("config.json", "w") as file:
-            json.dump(config, file, indent=4)
+            if 'biome_notification_enabled' in self.config:
+                config['biome_notification_enabled'] = self.config['biome_notification_enabled']
 
-        try:
-            with open("config.json", "r") as file:
-                saved_config = json.load(file)
+            config.update({
+                "biome_counts": self.biome_counts,
+                "session_time": session_time,
+                "accounts": self.accounts
+            })
+
+            with open(config_path, "w") as file:
+                json.dump(config, file, indent=4)
+
+            try:
+                with open(config_path, "r") as file:
+                    saved_config = json.load(file)
+            except Exception as e:
+                print(f"Error verifying config file: {str(e)}")
+
+            self.config = config
+
         except Exception as e:
-            print(f"Error verifying config file: {str(e)}")
-
-        self.config = config
+            self.error_logging(e, f"Error saving config file to {config_path}")
 
     def load_config(self):
         try:
-            config_paths = [
+
+            config_dir = os.path.join(os.getenv('APPDATA'), 'BiomeScope')
+            os.makedirs(config_dir, exist_ok=True)
+            appdata_config_path = os.path.join(config_dir, "config.json")
+
+            legacy_config_paths = [
                 "config.json",
                 "source_code/config.json",
                 os.path.join(os.path.dirname(__file__), "config.json"),
                 os.path.join(os.path.dirname(__file__), "source_code/config.json")
             ]
 
-            for path in config_paths:
-                if os.path.exists(path):
-                    with open(path, "r") as file:
-                        config = json.load(file)
+            if os.path.exists(appdata_config_path):
+                with open(appdata_config_path, "r") as file:
+                    config = json.load(file)
+                    return config
+            else:
+
+                for path in legacy_config_paths:
+                    if os.path.exists(path):
+
+                        with open(path, "r") as file:
+                            config = json.load(file)
+
+                        with open(appdata_config_path, "w") as file:
+                            json.dump(config, file, indent=4)
+
+                        print(f"Migrated config from {path} to {appdata_config_path}")
                         return config
 
-            return {"biome_counts": {biome: 0 for biome in self.biome_data}, "session_time": "0:00:00"}
+            default_config = {"biome_counts": {biome: 0 for biome in self.biome_data}, "session_time": "0:00:00"}
+            with open(appdata_config_path, "w") as file:
+                json.dump(default_config, file, indent=4)
+
+            return default_config
         except Exception as e:
-            self.error_logging(e, "Error at loading config.json. Try adding empty: '{}' into config.json to fix this error!")
+            self.error_logging(e, "Error loading config.json. Returning default configuration.")
             return {"biome_counts": {biome: 0 for biome in self.biome_data}, "session_time": "0:00:00"}
 
     def import_config(self):
@@ -869,8 +1000,9 @@ class BiomePresence():
 
             session_time = config.get("session_time")
             self.session_label.config(text=f"Running Session: {session_time}")
+
             self.save_config()
-            messagebox.askokcancel("Ok imported!!", "Your selected config.json imported and saved successfully!")
+            messagebox.askokcancel("OK Imported!", "Your selected config.json imported and saved successfully to AppData!")
         except Exception as e:
             self.error_logging(e, "Error at importing config.json")
 
@@ -1990,7 +2122,20 @@ class BiomePresence():
         if not hasattr(self, 'logs'):
             return
 
-        filtered_logs = [log for log in self.logs if keyword.lower() in log.lower()]
+        keyword = keyword.lower()
+        filtered_logs = []
+
+        for log in self.logs:
+            if isinstance(log, dict):
+
+                message = log.get("message", "").lower()
+                if keyword in message:
+                    filtered_logs.append(log)
+            else:
+
+                if keyword in log.lower():
+                    filtered_logs.append(log)
+
         self.display_logs(filtered_logs)
 
     def display_logs(self, logs=None):
@@ -2008,11 +2153,23 @@ class BiomePresence():
 
         last_logs = logs[-30:] if len(logs) > 30 else logs
 
-        for log in last_logs: 
-            self.logs_text.insert("end", log + "\n")
+        for log in last_logs:
+
+            if isinstance(log, dict):
+                timestamp = log.get("timestamp", "")
+                message = log.get("message", "")
+                if timestamp:
+                    formatted_log = f"[{timestamp}] {message}"
+                else:
+                    formatted_log = message
+            else:
+
+                formatted_log = log
+
+            self.logs_text.insert("end", formatted_log + "\n")
 
         self.logs_text.config(state="disabled")
-        self.logs_text.see("end")  
+        self.logs_text.see("end")
 
     def create_credit_tab(self, frame):
         """Create the credits tab with information about the application"""

@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.3-Stable] - 2025-04-06
+
+### Added
+- Automatic Feature Flag Configuration
+  - Automatically sets up required feature flags for all Roblox installations
+  - No manual configuration needed
+  - Works for Bloxstrap and Fishstrap installations
+  - Improved logging for feature flag setup
+  - First-time setup instructions for users
+  - Ensures optimal logging and detection capabilities
+- Configuration files now stored in AppData folder
+  - Settings persist through application updates
+  - Automatic migration of existing configs to AppData
+- Improved logging with structured JSON format
+- All testing updates added
+- Updated to stable release
+- Fixed other minor bugs
+
 ## [1.0.3-Testing2] - 2025-04-06
 
 ### Added
@@ -21,7 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Sequential mode for Anti-AFK system
 - Improved account detection with enhanced reliability
 - Fixed most if all past reported bugs
-- Reworked webhook checking and sending
+- Rewritten webhook checking and sending
 - Improved resource usage
 - Improved Auto Updater on Testing versions
 
@@ -80,7 +98,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Session time tracking bugs
 - UI responsiveness in high DPI displays
 
-[Unreleased]: https://github.com/cresqnt-sys/BiomeScope/compare/v1.0.3-Testing2...HEAD
+[Unreleased]: https://github.com/cresqnt-sys/BiomeScope/compare/v1.0.3-Stable...HEAD
+[1.0.3-Stable]: https://github.com/cresqnt-sys/BiomeScope/compare/v1.0.3-Testing2...v1.0.3-Stable
 [1.0.3-Testing2]: https://github.com/cresqnt-sys/BiomeScope/compare/v1.0.3-Testing...v1.0.3-Testing2
 [1.0.3-Testing]: https://github.com/cresqnt-sys/BiomeScope/compare/v1.0.2-Beta...v1.0.3-Testing
 [1.0.2-Hotfix]: https://github.com/cresqnt-sys/BiomeScope/compare/v1.0.2-Beta...v1.0.2-Hotfix
