@@ -314,16 +314,21 @@ class AntiAFK:
         if not hasattr(self, 'status_text'):
             return
 
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        formatted_message = f"[{timestamp}] {message}\n"
+        # Check if the widget still exists
+        try:
+            timestamp = datetime.now().strftime("%H:%M:%S")
+            formatted_message = f"[{timestamp}] {message}\n"
 
-        self.status_text.config(state="normal")
-        self.status_text.insert("end", formatted_message)
-        self.status_text.see("end")
-        self.status_text.config(state="disabled")
+            self.status_text.config(state="normal")
+            self.status_text.insert("end", formatted_message)
+            self.status_text.see("end")
+            self.status_text.config(state="disabled")
 
-        if hasattr(self.parent, 'append_log'):
-            self.parent.append_log(f"[Anti-AFK] {message}")
+            if hasattr(self.parent, 'append_log'):
+                self.parent.append_log(f"[Anti-AFK] {message}")
+        except (tk.TclError, RuntimeError, AttributeError):
+            # Widget is destroyed or invalid - silently ignore
+            pass
 
     def toggle_antiafk(self, enable=None):
         """Toggle the Anti-AFK functionality on or off"""
@@ -1196,3 +1201,22 @@ class AntiAFK:
             self.interval_var.set("120")  # Changed default from 180 to 120
             self.update_config()
             self.update_status("Invalid interval value. Using default (120 seconds).")
+
+    def shutdown(self):
+        """Safely shut down the Anti-AFK system - used when application is closing"""
+        try:
+            # Don't call stop_antiafk which tries to update the UI
+            # Just directly stop the threads
+            if self.antiafk_running:
+                self.antiafk_stop_event.set()
+                if self.antiafk_thread and self.antiafk_thread.is_alive():
+                    self.antiafk_thread.join(timeout=1.0)
+                self.antiafk_running = False
+                
+            if self.monitor_thread_running:
+                self.monitor_thread_running = False
+                if self.monitor_thread and self.monitor_thread.is_alive():
+                    self.monitor_thread.join(timeout=1.0)
+        except Exception:
+            # Ignore any errors during shutdown
+            pass

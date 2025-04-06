@@ -977,6 +977,11 @@ class BiomePresence():
 
         if dont_ask_again:
             return
+            
+        # Skip update check if current version is a testing version but not Beta or Stable
+        if "-Testing" in current_version and not ("-Beta" in current_version or "-Stable" in current_version):
+            print(f"Update check skipped: Running testing version {current_version}")
+            return
 
         try:
             response = requests.get("https://api.github.com/repos/cresqnt-sys/BiomeScope/releases/latest")

@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed most if all past reported bugs
 - Reworked webhook checking and sending
 - Improved resource usage
+- Improved Auto Updater on Testing versions
 
 ### Changed
 - Complete Anti-AFK system rewrite for better performance and stability
