@@ -88,7 +88,7 @@ class BiomePresence():
         except locale.Error:
             locale.setlocale(locale.LC_ALL, '')
 
-        self.version = "1.0.3-Stable"
+        self.version = "1.0.2-Beta"
 
         self.appdata_dir = os.path.join(os.getenv('APPDATA'), 'BiomeScope')
         os.makedirs(self.appdata_dir, exist_ok=True)
@@ -1231,26 +1231,83 @@ class BiomePresence():
         """Download and install update"""
         try:
 
-            response = requests.get(download_url)
-            if response.status_code == 200:
+            file_name = os.path.basename(download_url)
+            if not file_name.endswith('.exe'):
+                file_name = 'BiomeScope.exe'
 
-                save_path = os.path.join(os.environ.get('TEMP', '.'), 'BiomeScope_update.zip')
-                with open(save_path, 'wb') as f:
-                    f.write(response.content)
+            save_path = filedialog.asksaveasfilename(
+                defaultextension=".exe",
+                filetypes=[("Executable files", "*.exe")],
+                initialfile=file_name,
+                title="Save BiomeScope Update As"
+            )
 
-                os.startfile(os.path.dirname(save_path))
+            if not save_path:  
+                return
 
-                messagebox.showinfo(
-                    "Update Downloaded", 
-                    f"Update has been downloaded to:\n{save_path}\n\nPlease extract the files and replace your current installation."
-                )
+            self.append_log(f"Downloading update to: {save_path}")
+
+            response = requests.get(download_url, stream=True)
+            response.raise_for_status()
+
+            total_size = int(response.headers.get('content-length', 0))
+            block_size = 1024  
+            progress = 0
+
+            progress_window = ttk.Toplevel(self.root)
+            progress_window.title("Downloading Update")
+            progress_window.geometry("300x150")
+            progress_window.transient(self.root)
+
+            progress_label = ttk.Label(progress_window, text="Downloading update...")
+            progress_label.pack(pady=10)
+
+            progress_bar = ttk.Progressbar(progress_window, length=200, mode='determinate')
+            progress_bar.pack(pady=10)
+
+            size_label = ttk.Label(progress_window, text="0%")
+            size_label.pack(pady=5)
+
+            with open(save_path, 'wb') as f:
+                for data in response.iter_content(block_size):
+                    progress += len(data)
+                    f.write(data)
+
+                    if total_size:
+                        percentage = (progress / total_size) * 100
+                        progress_bar['value'] = percentage
+                        size_label.config(text=f"{percentage:.1f}%")
+                        progress_window.update()
+
+            progress_window.destroy()
+
+            self.append_log("Update downloaded successfully")
+
+            if messagebox.askyesno(
+                "Update Downloaded",
+                f"Update has been downloaded to:\n{save_path}\n\nWould you like to run the new version now?"
+            ):
+
+                self.append_log("Starting new version and closing current instance")
+                os.startfile(save_path)
+                self.root.after(1000, self.root.destroy)  
             else:
-                messagebox.showerror(
-                    "Download Failed", 
-                    f"Failed to download update. Status code: {response.status_code}"
+                messagebox.showinfo(
+                    "Update Downloaded",
+                    f"Update has been downloaded to:\n{save_path}\n\nYou can run it manually when ready."
                 )
+
+        except requests.RequestException as e:
+            messagebox.showerror(
+                "Download Failed",
+                f"Failed to download update: {str(e)}"
+            )
+            self.error_logging(e, "Failed to download update")
         except Exception as e:
-            messagebox.showerror("Error", f"An error occurred: {str(e)}")
+            messagebox.showerror(
+                "Error",
+                f"An error occurred while downloading: {str(e)}"
+            )
             self.error_logging(e, "Error downloading update")
 
     def open_biome_notification_settings(self):
