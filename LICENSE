@@ -1,4 +1,18 @@
-                    GNU GENERAL PUBLIC LICENSE
+# Licensing Information
+
+This project is a fork of Noteab Macro which is licensed under 
+the Apache License 2.0. Modifications and additions made by cresqnt 
+are licensed under the GNU General Public License v3.0.
+
+The combined work is distributed under the terms of the GNU GPL v3.0.
+
+The original Apache-licensed code retains its original license. A copy of 
+the Apache License 2.0 can be found in the file named 'APACHE-LICENSE-2.0.txt' 
+in this repository.
+
+The full text of the GNU GPL v3.0 follows:
+
+                     GNU GENERAL PUBLIC LICENSE
                        Version 3, 29 June 2007
 
  Copyright (C) 2007 Free Software Foundation, Inc. <https://fsf.org/>
