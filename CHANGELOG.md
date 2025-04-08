@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.4-Beta] - 2025-04-07
+
+### Added
+- Periodic account checking system that works even if Roblox is started after BiomeScope
+- Enhanced log file validation to prevent false detections
+- Improved timestamp checking for more accurate log processing
+
+### Fixed
+- Fixed issue where old logs could be incorrectly identified as current
+- Stricter log association to prevent "NULL" biome detections for inactive accounts
+- More robust "Player added:" message detection
+- Removed loose pattern matching that could cause false positives
+
+### Changed
+- Increased scanning frequency for more responsive detection
+- Better caching of log files with improved validation
+- More detailed logging to track account and biome state changes
+
 ## [1.0.3-Stable] - 2025-04-06
 
 ### Added
@@ -98,7 +116,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Session time tracking bugs
 - UI responsiveness in high DPI displays
 
-[Unreleased]: https://github.com/cresqnt-sys/BiomeScope/compare/v1.0.3-Stable...HEAD
+[Unreleased]: https://github.com/cresqnt-sys/BiomeScope/compare/v1.0.4-Beta...HEAD
+[1.0.4-Beta]: https://github.com/cresqnt-sys/BiomeScope/compare/v1.0.3-Stable...v1.0.4-Beta
 [1.0.3-Stable]: https://github.com/cresqnt-sys/BiomeScope/compare/v1.0.3-Testing2...v1.0.3-Stable
 [1.0.3-Testing2]: https://github.com/cresqnt-sys/BiomeScope/compare/v1.0.3-Testing...v1.0.3-Testing2
 [1.0.3-Testing]: https://github.com/cresqnt-sys/BiomeScope/compare/v1.0.2-Beta...v1.0.3-Testing
