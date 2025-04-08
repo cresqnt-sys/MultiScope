@@ -10,7 +10,7 @@ import shutil
 import winreg
 
 if hasattr(sys, 'frozen'):  
-    myappid = 'BiomeScope.App.1.0.4.Beta'
+    myappid = 'BiomeScope.App.1.0.4.Beta2'
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
 
 try:
@@ -85,7 +85,7 @@ class BiomePresence():
     def __init__(self):
         """Initialize BiomePresence class"""
         try:
-            self.version = "1.0.4-Beta"
+            self.version = "1.0.4-Beta2"
             self.detection_running = False
             locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
         except locale.Error:
@@ -572,88 +572,132 @@ class BiomePresence():
             self.error_logging(e, error_msg)
 
     def scan_for_player_added_messages(self):
-        """Scan active log files for "Player added:" messages to identify username matches"""
+        """Scan log files for player added messages to identify accounts"""
         try:
+            if not hasattr(self, 'accounts'):
+                self.accounts = self.config.get("accounts", [])
 
-            if not hasattr(self, 'accounts') or not self.accounts:
-                return
+            if not self.accounts and not hasattr(self, 'detected_any_accounts'):
+                self.append_log("⚠️ No accounts configured. Scanning logs for any player added messages.")
 
-            if not hasattr(self, 'locked_log_files'):
-                self.locked_log_files = {}  
+            if not hasattr(self, 'log_scan_count'):
+                self.log_scan_count = 0
+            self.log_scan_count += 1
 
-            if not hasattr(self, 'username_log_cache'):
-                self.username_log_cache = {}
+            if not hasattr(self, 'player_added_verified_logs'):
+                self.player_added_verified_logs = set()
 
-            usernames_to_find = []
-            for account in self.accounts:
-                username = account.get("username", "").lower()
-                if username and username not in self.locked_log_files:
-                    usernames_to_find.append(username)
+            total_scanned = 0
+            newly_found = []
+            account_usernames = {acc.get("username", "").lower() for acc in self.accounts if acc.get("username")}
 
-            if not usernames_to_find:
-                return
-
-            all_log_files = self.get_log_files(silent=True)
-            if not all_log_files:
-                return
+            log_files = self.get_log_files(silent=True)
+            if not log_files:
+                return newly_found
 
             current_time = time.time()
-            active_log_files = [
-                log_file for log_file in all_log_files 
-                if current_time - os.path.getmtime(log_file) < 300  
-            ]
-
-            roblox_count = 0
-            for proc in psutil.process_iter(['name']):
+            recent_logs = []
+            for log_file in log_files:
                 try:
-
-                    if proc.info['name'] and proc.info['name'] == 'RobloxPlayerBeta.exe':
-                        roblox_count += 1
-                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                    if current_time - os.path.getmtime(log_file) < 300:
+                        recent_logs.append(log_file)
+                except Exception:
                     continue
 
-            roblox_count = max(1, min(roblox_count, len(usernames_to_find)))
+            if not recent_logs:
+                if self.log_scan_count % 10 == 0:  
+                    self.append_log("No recent log files to scan for account detection")
+                return newly_found
 
-            active_log_files = active_log_files[:roblox_count]
-
-            if not active_log_files:
-                return
-
-            self.append_log(f"Scanning {len(active_log_files)} active logs for 'Player added:' username messages")
-
-            locked_files = set(self.locked_log_files.values())
-            files_to_scan = [f for f in active_log_files if f not in locked_files]
-
-            newly_found = []
-
-            for log_file in files_to_scan:
+            for log_file in recent_logs:
                 try:
-                    with open(log_file, 'r', encoding='utf-8', errors='ignore') as file:
+                    total_scanned += 1
 
-                        content = file.read(50000)
+                    try:
+                        with open(log_file, 'r', encoding='utf-8', errors='ignore') as file:
 
-                        for line in content.split('\n'):
-                            if "Player added:" in line:
+                            file_size = os.path.getsize(log_file)
+                            read_size = min(50000, file_size)
+                            file.seek(max(0, file_size - read_size))
+                            content = file.read(read_size)
 
-                                username_part = line.split("Player added:")[1].strip()
+                            player_added_index = content.find("Player added:")
+                            if player_added_index != -1:
+                                extract = content[player_added_index + 13:].strip()
+                                end_index = extract.find("\n")
+                                if end_index != -1:
+                                    player_name = extract[:end_index].strip()
+                                else:
+                                    player_name = extract.strip()
 
-                                detected_username = username_part.rsplit(' ', 1)[0].strip() if ' ' in username_part else username_part
-                                detected_username = detected_username.lower()
+                                if player_name:
+                                    player_name_lower = player_name.lower()
 
-                                if detected_username in usernames_to_find:
+                                    self.player_added_verified_logs.add(log_file)
 
-                                    self.username_log_cache[detected_username] = log_file
-                                    self.locked_log_files[detected_username] = log_file
-                                    usernames_to_find.remove(detected_username)
-                                    newly_found.append(detected_username)
-                                    self.append_log(f"🎮 PLAYER DETECTED: '{detected_username}' found in log file via 'Player added:' message")
-                                    self.append_log(f"📋 Log file assigned: {os.path.basename(log_file)}")
+                                    if not hasattr(self, 'verified_log_files'):
+                                        self.verified_log_files = {}
+                                    self.verified_log_files[player_name] = log_file
 
-                                    if not usernames_to_find:
-                                        break
+                                    if not hasattr(self, 'username_log_cache'):
+                                        self.username_log_cache = {}
+                                    self.username_log_cache[player_name] = log_file
+
+                                    if player_name_lower not in account_usernames:
+                                        if not hasattr(self, 'detected_any_accounts'):
+                                            self.detected_any_accounts = True
+                                            self.append_log(f"New account detected: {player_name}. Adding to tracking.")
+
+                                            new_account = {"username": player_name, "ps_link": ""}
+                                            self.accounts.append(new_account)
+                                            self.config["accounts"] = self.accounts
+                                            self.save_config()
+                                            newly_found.append(player_name)
+                                    else:
+
+                                        if self.log_scan_count % 10 == 0:  
+                                            self.append_log(f"Verified log for known account: {player_name}")
+
+                            elif not player_added_index:
+                                load_failed_index = content.find("load failed in Players.")
+                                if load_failed_index != -1:
+                                    extract = content[load_failed_index + 23:]
+                                    end_index = extract.find(".")
+                                    if end_index != -1:
+                                        player_name = extract[:end_index].strip()
+
+                                        if player_name:
+                                            player_name_lower = player_name.lower()
+
+                                            if not hasattr(self, 'verified_log_files'):
+                                                self.verified_log_files = {}
+                                            self.verified_log_files[player_name] = log_file
+
+                                            if not hasattr(self, 'username_log_cache'):
+                                                self.username_log_cache = {}
+                                            self.username_log_cache[player_name] = log_file
+
+                                            if player_name_lower not in account_usernames:
+                                                if not hasattr(self, 'detected_any_accounts'):
+                                                    self.detected_any_accounts = True
+                                                    self.append_log(f"New account detected via load failed: {player_name}")
+
+                                                    new_account = {"username": player_name, "ps_link": ""}
+                                                    self.accounts.append(new_account)
+                                                    self.config["accounts"] = self.accounts
+                                                    self.save_config()
+                                                    newly_found.append(player_name)
+
+                    except Exception as e:
+                        self.error_logging(e, f"Error reading log file during account scan: {log_file}")
+                        continue
+
                 except Exception as e:
-                    self.error_logging(e, f"Error processing log file for Player added messages: {log_file}")
+                    self.error_logging(e, f"Error scanning log file: {log_file}")
                     continue
+
+            if newly_found or self.log_scan_count % 10 == 0:
+                self.append_log(f"Scanned {total_scanned} log files for player info. Found {len(newly_found)} new accounts.")
 
             return newly_found
 
@@ -661,6 +705,7 @@ class BiomePresence():
             error_msg = f"Error in scan_for_player_added_messages: {str(e)}"
             self.append_log(error_msg)
             self.error_logging(e, error_msg)
+            return []
 
     def parse_session_time(self, session_time_str):
         """Parse session time from string format to seconds"""
@@ -3745,64 +3790,44 @@ class BiomePresence():
         print("Biome detection stopped.")
 
     def get_log_file_for_user(self, username):
-        """Get the log file for a specific user"""
+        """Get the log file for a specific user, similar to AHK's getLogFilefromUser"""
         if not username:
             self.append_log("No username provided for log file search")
             return None
 
         try:
-            if not os.path.exists(self.logs_dir):
-                self.append_log(f"Logs directory not found: {self.logs_dir}")
-                return None
 
-            current_time = time.time()
-            files = []
-            try:
-                for f in os.listdir(self.logs_dir):
-                    if f.endswith('.log'):
-                        full_path = os.path.join(self.logs_dir, f)
-                        if os.path.isfile(full_path) and os.path.getsize(full_path) > 0:
+            sorted_files = self.get_log_files(silent=True)
 
-                            if current_time - os.path.getmtime(full_path) < 3600:
-                                files.append(full_path)
-            except Exception as e:
-                self.error_logging(e, f"Error listing log files for user: {username}")
-                return None
-
-            if not files:
+            if not sorted_files:
                 if not hasattr(self, 'no_files_logged') or time.time() - self.no_files_logged.get(username, 0) > 300:
-                    self.append_log(f"No valid recent log files found for user: {username}")
+                    self.append_log(f"No valid log files found for user: {username}")
                     if not hasattr(self, 'no_files_logged'):
                         self.no_files_logged = {}
                     self.no_files_logged[username] = time.time()
                 return None
 
-            files.sort(key=os.path.getmtime, reverse=True)
+            if hasattr(self, 'username_log_cache') and username in self.username_log_cache:
+                cached_file = self.username_log_cache[username]
 
-            if not hasattr(self, 'player_added_verified_logs'):
-                self.player_added_verified_logs = set()
+                if cached_file in sorted_files:
 
-            if username in self.verified_log_files:
-                verified_file = self.verified_log_files[username]
-                if verified_file in files:
                     try:
-
-                        if current_time - os.path.getmtime(verified_file) < 300:
-                            return verified_file
+                        if time.time() - os.path.getmtime(cached_file) < 300:
+                            return cached_file
                     except Exception:
                         pass
 
-                if username in self.verified_log_files:
-                    del self.verified_log_files[username]
-                if username in self.username_log_cache:
-                    del self.username_log_cache[username]
+            current_time = time.time()
 
             player_added_pattern = f"Player added: {username}"
-            for file_path in files:
-                try:
 
-                    if current_time - os.path.getmtime(file_path) > 300:
-                        continue
+            for file_path in sorted_files:
+
+                if current_time - os.path.getmtime(file_path) > 300:
+                    continue
+
+                try:
 
                     with open(file_path, 'r', encoding='utf-8', errors='ignore') as file:
 
@@ -3812,18 +3837,47 @@ class BiomePresence():
                         content = file.read(read_size)
 
                         if player_added_pattern in content:
-                            self.append_log(f"🎮 PLAYER LINKED: Found active log file for {username} via 'Player added:' message: {os.path.basename(file_path)}")
+                            self.append_log(f"✅ Found log file for {username}: {os.path.basename(file_path)}")
+
+                            if not hasattr(self, 'username_log_cache'):
+                                self.username_log_cache = {}
                             self.username_log_cache[username] = file_path
+
+                            if not hasattr(self, 'verified_log_files'):
+                                self.verified_log_files = {}
                             self.verified_log_files[username] = file_path
+
+                            if not hasattr(self, 'player_added_verified_logs'):
+                                self.player_added_verified_logs = set()
                             self.player_added_verified_logs.add(file_path)
+
                             return file_path
 
+                        load_failed_index = content.find("load failed in Players.")
+                        if load_failed_index != -1:
+                            extract = content[load_failed_index + 23:]
+                            end_index = extract.find(".")
+                            if end_index != -1:
+                                extracted_name = extract[:end_index].strip()
+                                if extracted_name.lower() == username.lower():
+                                    self.append_log(f"✅ Found log file for {username} via load failed: {os.path.basename(file_path)}")
+
+                                    if not hasattr(self, 'username_log_cache'):
+                                        self.username_log_cache = {}
+                                    self.username_log_cache[username] = file_path
+
+                                    if not hasattr(self, 'verified_log_files'):
+                                        self.verified_log_files = {}
+                                    self.verified_log_files[username] = file_path
+
+                                    return file_path
+
                 except Exception as e:
-                    self.error_logging(e, f"Error checking for Player added pattern in log file: {file_path}")
+                    self.error_logging(e, f"Error checking log file: {file_path}")
                     continue
 
             if not hasattr(self, 'no_match_logged') or time.time() - self.no_match_logged.get(username, 0) > 300:
-                self.append_log(f"No active log file found containing username: {username}")
+                self.append_log(f"No log file found for username: {username}")
                 if not hasattr(self, 'no_match_logged'):
                     self.no_match_logged = {}
                 self.no_match_logged[username] = time.time()
@@ -4125,87 +4179,57 @@ class BiomePresence():
                     self.append_log(f"Logs directory not found: {self.logs_dir}")
                 return []
 
-            if not hasattr(self, 'log_file_cache'):
-                self.log_file_cache = {}  
-
-            if not hasattr(self, 'log_dir_last_check'):
-                self.log_dir_last_check = 0
-
-            if not hasattr(self, 'log_dir_last_contents'):
-                self.log_dir_last_contents = []
-
             current_time = time.time()
+            log_files = []
 
-            should_rescan = (current_time - self.log_dir_last_check > 5)
+            try:
+                for filename in os.listdir(self.logs_dir):
+                    if not filename.endswith('.log'):
+                        continue
 
-            if not should_rescan and self.log_dir_last_contents:
-                log_files = self.log_dir_last_contents
-            else:
-                log_files = []
-                try:
-                    for f in os.listdir(self.logs_dir):
-                        if f.endswith('.log'):
-                            full_path = os.path.join(self.logs_dir, f)
-                            if os.path.isfile(full_path):
-                                try:
-                                    file_size = os.path.getsize(full_path)
-                                    if file_size > 0:
+                    is_player_log = "player" in filename.lower()
+                    is_last_log = "last" in filename.lower() 
 
-                                        file_creation_time = os.path.getctime(full_path)
-                                        if current_time - file_creation_time < 86400:  
-                                            log_files.append(full_path)
-                                            self.log_file_cache[full_path] = (os.path.getmtime(full_path), file_size)
-                                except (OSError, IOError):
-                                    continue
-                except Exception as e:
-                    if not silent:
-                        self.error_logging(e, "Error listing log directory contents")
-                    return []
+                    if is_player_log:
+                        full_path = os.path.join(self.logs_dir, filename)
+                        try:
+                            if os.path.isfile(full_path) and os.path.getsize(full_path) > 0:
+                                mod_time = os.path.getmtime(full_path)
+                                age_in_seconds = current_time - mod_time
 
-                self.log_dir_last_check = current_time
-                self.log_dir_last_contents = log_files.copy()
+                                priority = 2 if is_last_log else 1
+
+                                if age_in_seconds < 86400:
+                                    log_files.append({
+                                        'path': full_path,
+                                        'mod_time': mod_time,
+                                        'age': age_in_seconds,
+                                        'priority': priority
+                                    })
+                        except (OSError, IOError):
+                            continue
+            except Exception as e:
+                if not silent:
+                    self.error_logging(e, "Error listing log directory contents")
+                return []
 
             if not log_files:
                 return []
 
-            def get_mtime(file_path):
-                if file_path in self.log_file_cache:
-                    return self.log_file_cache[file_path][0]
-                else:
-                    try:
-                        mtime = os.path.getmtime(file_path)
-                        if os.path.exists(file_path):
-                            size = os.path.getsize(file_path)
-                            self.log_file_cache[file_path] = (mtime, size)
-                        return mtime
-                    except (OSError, IOError):
-                        return 0  
+            log_files.sort(key=lambda x: (-x['priority'], x['age']))
 
-            log_files.sort(key=get_mtime, reverse=True)
+            result_logs = [f['path'] for f in log_files]
 
-            account_count = len(self.accounts) if hasattr(self, 'accounts') and self.accounts else 1
-            needed_logs = max(10, account_count * 2)  
-
-            active_logs = []
-            recent_logs = []  
             for log_file in log_files:
-                try:
-                    if log_file in self.log_file_cache:
-                        file_mtime = self.log_file_cache[log_file][0]
-                    else:
-                        file_mtime = os.path.getmtime(log_file)
-                        if os.path.exists(log_file):
-                            self.log_file_cache[log_file] = (file_mtime, os.path.getsize(log_file))
-
-                    time_diff = current_time - file_mtime
-                    if time_diff < 300:  
-                        active_logs.append(log_file)
-                    elif time_diff < 3600:  
-                        recent_logs.append(log_file)
-                except Exception:
-                    continue
+                path = log_file['path']
+                if not hasattr(self, 'log_file_cache'):
+                    self.log_file_cache = {}
+                self.log_file_cache[path] = (log_file['mod_time'], os.path.getsize(path))
 
             if not silent:
+                active_logs = [f['path'] for f in log_files if f['age'] < 300]
+                recent_logs = [f['path'] for f in log_files if 300 <= f['age'] < 3600]
+
                 should_log = False
                 if hasattr(self, 'last_log_count') and self.last_log_count != len(log_files):
                     if abs(self.last_log_count - len(log_files)) > 3 or not hasattr(self, 'last_active_count') or abs(self.last_active_count - len(active_logs)) > 1:
@@ -4218,11 +4242,11 @@ class BiomePresence():
                     self.last_active_count = len(active_logs)
                     self.append_log(f"Found {len(active_logs)} active logs, {len(recent_logs)} recent logs, out of {len(log_files)} total logs")
 
-            result_logs = active_logs.copy()
+            account_count = len(self.accounts) if hasattr(self, 'accounts') and self.accounts else 1
+            needed_logs = max(10, account_count * 2)  
 
-            if len(result_logs) < needed_logs:
-                remaining_slots = needed_logs - len(result_logs)
-                result_logs.extend(recent_logs[:remaining_slots])
+            if len(result_logs) > needed_logs:
+                result_logs = result_logs[:needed_logs]
 
             if hasattr(self, 'player_added_verified_logs'):
                 for log_file in self.player_added_verified_logs:
@@ -4233,14 +4257,6 @@ class BiomePresence():
                 for username, log_file in self.locked_log_files.items():
                     if log_file not in result_logs and os.path.exists(log_file):
                         result_logs.append(log_file)
-
-            if hasattr(self, 'log_file_cache') and len(self.log_file_cache) > 1000:
-                to_remove = []
-                for cached_path in self.log_file_cache:
-                    if not os.path.exists(cached_path):
-                        to_remove.append(cached_path)
-                for path in to_remove:
-                    del self.log_file_cache[path]
 
             return result_logs
 
