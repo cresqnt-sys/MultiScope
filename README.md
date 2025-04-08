@@ -2,7 +2,7 @@
 
 A hard-fork of Noteab's Noteab Macro.
 
-**Current Version: 1.0.3-Stable**
+**Current Version: 1.0.4-Beta**
 
 ## 🌟 Features
 
