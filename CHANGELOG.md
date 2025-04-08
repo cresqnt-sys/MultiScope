@@ -7,49 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.0.4-Beta2] - 2025-04-07
-
-### Added
-- Complete reimplementation of log handling system
-- Auto-detection of accounts when not previously configured
-- New and improved player detection mechanics
-
-### Fixed
-- Solved critical issue with NULL biome detections for inactive accounts
-- Fixed log file validation to properly handle "Player added:" messages
-- Enhanced username extraction from log files with the "load failed in Players" pattern
-
-### Changed
-- Rewrote account scanning for more reliable detection
-- More intelligent log file filtering focusing on player logs with "last" in filename
-- Reduced log spam by only reporting changes and new detections
-- Completely overhauled the log file processing system for better reliability
-
 ## [1.0.4-Beta] - 2025-04-07
 
 ### Added
 - Periodic account checking system that works even if Roblox is started after BiomeScope
 - Enhanced log file validation to prevent false detections
 - Improved timestamp checking for more accurate log processing
-- Better handling for Roblox log file format
-- Improved "load failed in Players" detection for more reliable username extraction
 
 ### Fixed
 - Fixed issue where old logs could be incorrectly identified as current
 - Stricter log association to prevent "NULL" biome detections for inactive accounts
 - More robust "Player added:" message detection
 - Removed loose pattern matching that could cause false positives
-- Fixed inconsistent account detection when Roblox is started after BiomeScope
 
 ### Changed
 - Increased scanning frequency for more responsive detection
 - Better caching of log files with improved validation
 - More detailed logging to track account and biome state changes
-- Prioritizes "last" log files for more consistent detection
-
-### Technical
-- Rewritten log file sorting and filtering
-- Improved username extraction from log files
 
 ## [1.0.3-Stable] - 2025-04-06
 
@@ -142,8 +116,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Session time tracking bugs
 - UI responsiveness in high DPI displays
 
-[Unreleased]: https://github.com/cresqnt-sys/BiomeScope/compare/v1.0.4-Beta2...HEAD
-[1.0.4-Beta2]: https://github.com/cresqnt-sys/BiomeScope/compare/v1.0.4-Beta...v1.0.4-Beta2
+[Unreleased]: https://github.com/cresqnt-sys/BiomeScope/compare/v1.0.4-Beta...HEAD
 [1.0.4-Beta]: https://github.com/cresqnt-sys/BiomeScope/compare/v1.0.3-Stable...v1.0.4-Beta
 [1.0.3-Stable]: https://github.com/cresqnt-sys/BiomeScope/compare/v1.0.3-Testing2...v1.0.3-Stable
 [1.0.3-Testing2]: https://github.com/cresqnt-sys/BiomeScope/compare/v1.0.3-Testing...v1.0.3-Testing2

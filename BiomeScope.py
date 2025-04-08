@@ -10,7 +10,7 @@ import shutil
 import winreg
 
 if hasattr(sys, 'frozen'):  
-    myappid = 'BiomeScope.App.1.0.4.Beta2'
+    myappid = 'BiomeScope.App.1.0.4.Beta'
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
 
 try:
@@ -83,13 +83,14 @@ class SnippingWidget:
 
 class BiomePresence():
     def __init__(self):
-        """Initialize BiomePresence class"""
         try:
-            self.version = "1.0.4-Beta2"
+            self.version = "1.0.4-Beta"
             self.detection_running = False
             locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
         except locale.Error:
             locale.setlocale(locale.LC_ALL, '')
+
+        self.version = "1.0.3-Stable"
 
         self.appdata_dir = os.path.join(os.getenv('APPDATA'), 'BiomeScope')
         os.makedirs(self.appdata_dir, exist_ok=True)
