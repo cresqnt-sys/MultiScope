@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.0.4-Beta2] - 2025-04-15
+## [1.0.4-Beta2] - 2025-04-07
 
 ### Added
 - Complete reimplementation of log handling system
@@ -25,7 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Reduced log spam by only reporting changes and new detections
 - Completely overhauled the log file processing system for better reliability
 
-## [1.0.4-Beta] - 2025-04-10
+## [1.0.4-Beta] - 2025-04-07
 
 ### Added
 - Periodic account checking system that works even if Roblox is started after BiomeScope
