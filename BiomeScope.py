@@ -1,3 +1,23 @@
+"""
+BiomeScope - Sols RNG Multi-Account Biome Tracker based off of Noteab
+Copyright (C) 2025 cresqnt
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published
+by the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+Contact: https://cresqnt.tech
+"""
+
 import json, requests, time, os, threading, re, webbrowser, random, keyboard, pyautogui, pytesseract, autoit, psutil, locale
 import traceback
 import pygetwindow as gw
@@ -10,15 +30,13 @@ import shutil
 import winreg
 
 if hasattr(sys, 'frozen'):  
-    myappid = 'BiomeScope.App.1.0.4.Beta'
+    myappid = 'BiomeScope.App.1.0.5.Testing'
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
 
 try:
-
     from antiafk import AntiAFK
     has_antiafk = True
 except ImportError:
-
     has_antiafk = False
     print("AntiAFK module not available. Anti-AFK tab will be disabled.")
 
@@ -84,13 +102,11 @@ class SnippingWidget:
 class BiomePresence():
     def __init__(self):
         try:
-            self.version = "1.0.4-Beta"
+            self.version = "1.0.5-Testing"
             self.detection_running = False
             locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
         except locale.Error:
             locale.setlocale(locale.LC_ALL, '')
-
-        self.version = "1.0.3-Stable"
 
         self.appdata_dir = os.path.join(os.getenv('APPDATA'), 'BiomeScope')
         os.makedirs(self.appdata_dir, exist_ok=True)
@@ -288,7 +304,14 @@ class BiomePresence():
                 self.log_file_update_times = {}  
 
             if not hasattr(self, 'log_file_size_cache'):
-                self.log_file_size_cache = {}  
+                self.log_file_size_cache = {}
+
+            if not hasattr(self, 'active_accounts'):
+                self.active_accounts = set()  
+
+            newly_found = self.scan_for_player_added_messages()
+            if newly_found:
+                self.append_log(f"Found new/reopened accounts during biome check: {newly_found}")
 
             try:
                 roblox_procs = [p for p in psutil.process_iter(['name']) 
@@ -315,37 +338,110 @@ class BiomePresence():
                 self.append_log("No accounts configured for multi-account detection")
                 return
 
+            accounts_to_check = [account for account in accounts_to_check if account.get("active", True)]
+
+            if not accounts_to_check:
+                self.append_log("No active accounts configured for detection")
+                return
+
+            if not hasattr(self, 'active_accounts'):
+                self.active_accounts = set()
+
             log_files_to_check = {}
 
-            for username, log_file in list(self.locked_log_files.items()):
-                if os.path.exists(log_file):
-                    log_files_to_check[username] = log_file
-                else:
+            all_log_files = self.get_log_files(silent=True)
+            current_time = time.time()
+            active_log_files = [log_file for log_file in all_log_files if current_time - os.path.getmtime(log_file) < 300]
 
+            for log_file in active_log_files:
+                try:
+                    with open(log_file, 'r', encoding='utf-8', errors='ignore') as file:
+
+                        file_size = os.path.getsize(log_file)
+                        if file_size < 10000:
+                            file.seek(0)
+                            content = file.read()
+                        else:
+
+                            file.seek(0)
+                            start_content = file.read(5000)
+
+                            file.seek(max(0, file_size - 5000))
+                            end_content = file.read(5000)
+                            content = start_content + end_content
+
+                        for account in accounts_to_check:
+                            username = account.get("username", "")
+                            if not username:
+                                continue
+
+                            username_lower = username.lower()
+
+                            if f"Player added: {username}" in content or f"load failed in Players.{username}" in content:
+
+                                log_files_to_check[username] = log_file
+                                self.active_accounts.add(username_lower)
+
+                                self.username_log_cache[username] = log_file
+                                self.locked_log_files[username] = log_file
+
+                                self.append_log(f"Found active log file for {username}: {os.path.basename(log_file)}")
+                                break
+                except Exception as e:
+                    self.error_logging(e, f"Error scanning log file: {log_file}")
+                    continue
+
+            for username, log_file in list(self.locked_log_files.items()):
+
+                if username in log_files_to_check:
+                    continue
+
+                if os.path.exists(log_file):
+
+                    if time.time() - os.path.getmtime(log_file) < 300:
+                        log_files_to_check[username] = log_file
+                        self.active_accounts.add(username.lower())
+                    else:
+                        del self.locked_log_files[username]
+                        if username in self.username_log_cache:
+                            del self.username_log_cache[username]
+                        self.append_log(f"Removed stale log file association for {username}")
+                else:
                     del self.locked_log_files[username]
+                    if username in self.username_log_cache:
+                        del self.username_log_cache[username]
 
             for username_data in accounts_to_check:
                 username = username_data.get("username")
-                if not username or username in log_files_to_check:
+
+                if not username or username.lower() in [u.lower() for u in log_files_to_check.keys()]:
                     continue
 
                 if username in self.username_log_cache:
                     cached_file = self.username_log_cache[username]
                     if os.path.exists(cached_file):
-                        log_files_to_check[username] = cached_file
+                        if time.time() - os.path.getmtime(cached_file) < 300:
 
-            if len(log_files_to_check) < len(accounts_to_check):
+                            if cached_file not in log_files_to_check.values():
+                                log_files_to_check[username] = cached_file
+                                self.active_accounts.add(username.lower())
+                            else:
+
+                                del self.username_log_cache[username]
+                        else:
+
+                            del self.username_log_cache[username]
+
+            if len(log_files_to_check) < min(len(accounts_to_check), roblox_count):
                 all_log_files = self.get_log_files(silent=True)
 
                 current_time = time.time()
                 active_log_files = []
 
                 for log_file in all_log_files:
-
                     if log_file in self.log_file_update_times:
                         last_mod_time = self.log_file_update_times[log_file]
                     else:
-
                         last_mod_time = os.path.getmtime(log_file)
                         self.log_file_update_times[log_file] = last_mod_time
 
@@ -359,8 +455,11 @@ class BiomePresence():
                 new_assignments = 0
                 for username_data in accounts_to_check:
                     username = username_data.get("username")
-                    if not username or username in log_files_to_check:
+                    if not username or username.lower() in [u.lower() for u in log_files_to_check.keys()]:
                         continue
+
+                    if not available_log_files:
+                        break
 
                     username_patterns = [
                         f"Player added: {username} ", 
@@ -384,16 +483,15 @@ class BiomePresence():
                                     available_log_files.remove(file_path)
                                     new_assignments += 1
                                     found_match = True
+                                    self.active_accounts.add(username.lower())
                                     break
                         except Exception as e:
                             self.error_logging(e, f"Error reading log file for username matching: {file_path}")
                             continue
 
                     if not found_match and available_log_files:
-                        log_files_to_check[username] = available_log_files[0]
-                        self.username_log_cache[username] = available_log_files[0]
-                        available_log_files.pop(0)
-                        new_assignments += 1
+
+                        continue
 
                 if new_assignments > 0:
                     self.append_log(f"Assigned {new_assignments} new log files to accounts")
@@ -406,6 +504,7 @@ class BiomePresence():
 
                 try:
                     if not os.path.exists(log_file_path):
+                        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Log file does not exist for {username}: {log_file_path}")
                         return username, account_detected_biomes
 
                     if log_file_path in self.log_file_size_cache:
@@ -413,16 +512,17 @@ class BiomePresence():
                         current_size = os.path.getsize(log_file_path)
 
                         if cached_size == current_size:
+
                             return username, account_detected_biomes
 
                         self.log_file_size_cache[log_file_path] = current_size
                         file_size = current_size
                     else:
-
                         file_size = os.path.getsize(log_file_path)
                         self.log_file_size_cache[log_file_path] = file_size
 
                     if file_size == 0:
+                        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Empty log file for {username}: {log_file_path}")
                         return username, account_detected_biomes
 
                     if username not in self.account_last_positions:
@@ -433,9 +533,10 @@ class BiomePresence():
                     if current_position >= file_size:
                         return username, account_detected_biomes
 
+                    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Checking log file for {username}: {os.path.basename(log_file_path)}")
+
                     with open(log_file_path, 'r', encoding='utf-8', errors='ignore') as file:
                         if current_position > file_size:
-
                             current_position = max(0, file_size - 5000)
 
                         file.seek(current_position)
@@ -452,9 +553,11 @@ class BiomePresence():
                                         biome = self.get_biome_from_rpc(line)
                                         if biome and biome not in account_detected_biomes:
                                             account_detected_biomes.add(biome)
+                                            rpc_detected_message = f"🌍 BIOME DETECTED via RPC: Found biome '{biome}' for {username} in RPC message"
+                                            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {rpc_detected_message}")
+                                            self.append_log(rpc_detected_message)
 
                             if account_detected_biomes:
-
                                 self.account_last_positions[username] = file_size
                                 return username, account_detected_biomes
 
@@ -477,13 +580,16 @@ class BiomePresence():
                             biome = self.get_biome_from_rpc(line)
                             if biome and biome not in account_detected_biomes:
                                 account_detected_biomes.add(biome)
+                                rpc_detected_message = f"🌍 BIOME DETECTED via RPC: Found biome '{biome}' for {username} in RPC message"
+                                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {rpc_detected_message}")
+                                self.append_log(rpc_detected_message)
 
                     if account_detected_biomes:
-
                         for line in lines:
                             if "Player added:" in line and username in line:
                                 if username not in self.locked_log_files:
                                     self.locked_log_files[username] = log_file_path
+                                    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 🔒 Locked log file for {username}: {os.path.basename(log_file_path)}")
                         return username, account_detected_biomes
 
                     for line in lines:
@@ -492,7 +598,9 @@ class BiomePresence():
                         if "Player added:" in line and username in line:
                             if username not in self.locked_log_files:
                                 self.locked_log_files[username] = log_file_path
-                                self.append_log(f"✅ Locked log file for {username}: {os.path.basename(log_file_path)}")
+                                locked_message = f"✅ Locked log file for {username}: {os.path.basename(log_file_path)}"
+                                self.append_log(locked_message)
+                                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {locked_message}")
 
                         for biome in self.biome_data:
                             if biome in account_detected_biomes:
@@ -529,27 +637,44 @@ class BiomePresence():
                                     line_upper == biome_upper
                                 ]):
                                     account_detected_biomes.add(biome)
+                                    match_type = next((pattern for pattern in [
+                                        f"BIOME: {biome_upper}", f"BIOME {biome_upper}", f"ENTERED {biome_upper}",
+                                        f"BIOME:{biome_upper}", f"CURRENT BIOME: {biome_upper}", f"CURRENT BIOME {biome_upper}",
+                                        f"BIOME CHANGED TO {biome_upper}", f"BIOME CHANGED: {biome_upper}",
+                                        f"BIOME TYPE: {biome_upper}", f"BIOME TYPE {biome_upper}",
+                                        f"ENVIRONMENT: {biome_upper}", f"ENVIRONMENT {biome_upper}"
+                                    ] if pattern in line_upper), "text match")
+
+                                    biome_detected_message = f"🌍 BIOME DETECTED via text: Found biome '{biome}' for {username} ({match_type})"
+                                    self.append_log(biome_detected_message)
+                                    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {biome_detected_message}")
+                                    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Line content: {line}")
                                     break
 
                 except Exception as e:
                     error_msg = f"Error processing log file for {username}: {str(e)}"
                     self.error_logging(e, error_msg)
+                    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {error_msg}")
 
                 return username, account_detected_biomes
 
-            with concurrent.futures.ThreadPoolExecutor(max_workers=min(16, len(log_files_to_check) * 2)) as executor:
+            if not log_files_to_check:
+                self.append_log("No log files to check for biomes")
+                return
 
-                future_to_username = {
-                    executor.submit(process_log_file, (username, log_file)): username
-                    for username, log_file in log_files_to_check.items()
-                }
+            with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, min(16, len(log_files_to_check) * 2))) as executor:
+                future_to_username = {}
+
+                for username, log_file in log_files_to_check.items():
+                    future = executor.submit(process_log_file, (username, log_file))
+                    future_to_username[future] = username
 
                 for future in concurrent.futures.as_completed(future_to_username):
                     username = future_to_username[future]
                     try:
-                        username, biomes = future.result()
+                        result_username, biomes = future.result()
                         if biomes:
-                            detected_biomes[username] = biomes
+                            detected_biomes[result_username] = biomes
                     except Exception as e:
                         error_msg = f"Error in thread for {username}: {str(e)}"
                         self.error_logging(e, error_msg)
@@ -588,9 +713,24 @@ class BiomePresence():
             if not hasattr(self, 'player_added_verified_logs'):
                 self.player_added_verified_logs = set()
 
-            total_scanned = 0
+            if not hasattr(self, 'active_accounts'):
+                self.active_accounts = set()
+
+            if not hasattr(self, 'last_scan_times'):
+                self.last_scan_times = {}
+
+            if not hasattr(self, 'last_player_detection'):
+                self.last_player_detection = {}
+
+            if not hasattr(self, 'username_log_cache'):
+                self.username_log_cache = {}
+
+            if not hasattr(self, 'locked_log_files'):
+                self.locked_log_files = {}
+
             newly_found = []
             account_usernames = {acc.get("username", "").lower() for acc in self.accounts if acc.get("username")}
+            detected_accounts = set()  
 
             log_files = self.get_log_files(silent=True)
             if not log_files:
@@ -600,10 +740,21 @@ class BiomePresence():
             recent_logs = []
             for log_file in log_files:
                 try:
+
                     if current_time - os.path.getmtime(log_file) < 300:
-                        recent_logs.append(log_file)
+
+                        last_scan = self.last_scan_times.get(log_file, 0)
+                        if current_time - last_scan > 10:
+                            recent_logs.append(log_file)
+                            self.last_scan_times[log_file] = current_time
                 except Exception:
                     continue
+
+            self.last_scan_times = {k: v for k, v in self.last_scan_times.items() 
+                                  if current_time - v < 300 and os.path.exists(k)}
+
+            self.last_player_detection = {k: v for k, v in self.last_player_detection.items()
+                                        if current_time - v < 300}
 
             if not recent_logs:
                 if self.log_scan_count % 10 == 0:  
@@ -612,93 +763,130 @@ class BiomePresence():
 
             for log_file in recent_logs:
                 try:
-                    total_scanned += 1
+                    with open(log_file, 'r', encoding='utf-8', errors='ignore') as file:
 
-                    try:
-                        with open(log_file, 'r', encoding='utf-8', errors='ignore') as file:
+                        file.seek(0)
+                        content = file.read(50000)  
 
-                            file_size = os.path.getsize(log_file)
-                            read_size = min(50000, file_size)
-                            file.seek(max(0, file_size - read_size))
-                            content = file.read(read_size)
+                        found_player = False
 
-                            player_added_index = content.find("Player added:")
-                            if player_added_index != -1:
-                                extract = content[player_added_index + 13:].strip()
-                                end_index = extract.find("\n")
-                                if end_index != -1:
-                                    player_name = extract[:end_index].strip()
-                                else:
-                                    player_name = extract.strip()
+                        if "Player added:" in content:
+                            lines = content.splitlines()
+
+                            for line in lines[:100]:
+                                if "Player added:" in line:
+                                    player_added_index = line.find("Player added:")
+                                    extract = line[player_added_index + 13:].strip()
+                                    player_name = extract.split()[0] if extract else ""
+
+                                    if player_name:
+                                        found_player = True
+                                        player_name_lower = player_name.lower()
+                                        detected_accounts.add(player_name)
+
+                                        last_detection = self.last_player_detection.get(player_name_lower, 0)
+                                        if current_time - last_detection > 30:  
+                                            if log_file not in self.player_added_verified_logs:
+                                                self.append_log(f"🎮 PLAYER DETECTED: Found '{player_name}' in log file")
+                                                self.player_added_verified_logs.add(log_file)
+                                            self.last_player_detection[player_name_lower] = current_time
+
+                                        if not hasattr(self, 'verified_log_files'):
+                                            self.verified_log_files = {}
+                                        self.verified_log_files[player_name] = log_file
+
+                                        self.username_log_cache[player_name] = log_file
+
+                                        if player_name in self.locked_log_files and self.locked_log_files[player_name] != log_file:
+                                            self.append_log(f"🔄 Updated log file for {player_name}: {os.path.basename(log_file)}")
+                                        self.locked_log_files[player_name] = log_file
+
+                                        self.active_accounts.add(player_name_lower)
+
+                                        for account in self.accounts:
+                                            if account.get("username", "").lower() == player_name_lower:
+                                                if not account.get("active", True):
+                                                    account["active"] = True
+                                                    self.append_log(f"Reactivated account: {player_name}")
+                                                    self.config["accounts"] = self.accounts
+                                                    self.save_config()
+                                                break
+
+                                        if player_name_lower not in account_usernames:
+                                            if not hasattr(self, 'detected_any_accounts'):
+                                                self.detected_any_accounts = True
+                                                self.append_log(f"New account detected: {player_name}. Adding to tracking.")
+
+                                                new_account = {"username": player_name, "ps_link": "", "active": True}
+                                                self.accounts.append(new_account)
+                                                self.config["accounts"] = self.accounts
+                                                self.save_config()
+                                                newly_found.append(player_name)
+
+                        if not found_player and "load failed in Players." in content and log_file not in self.player_added_verified_logs:
+                            load_failed_index = content.find("load failed in Players.")
+                            extract = content[load_failed_index + 23:]
+                            end_index = extract.find(".")
+                            if end_index != -1:
+                                player_name = extract[:end_index].strip()
 
                                 if player_name:
                                     player_name_lower = player_name.lower()
+                                    detected_accounts.add(player_name)
 
-                                    self.player_added_verified_logs.add(log_file)
+                                    last_detection = self.last_player_detection.get(player_name_lower, 0)
+                                    if current_time - last_detection > 30:  
+                                        if log_file not in self.player_added_verified_logs:
+                                            self.append_log(f"🎮 PLAYER DETECTED: Found '{player_name}' in log file via 'load failed in Players' message")
+                                        self.last_player_detection[player_name_lower] = current_time
 
                                     if not hasattr(self, 'verified_log_files'):
                                         self.verified_log_files = {}
                                     self.verified_log_files[player_name] = log_file
 
-                                    if not hasattr(self, 'username_log_cache'):
-                                        self.username_log_cache = {}
                                     self.username_log_cache[player_name] = log_file
+
+                                    if player_name in self.locked_log_files and self.locked_log_files[player_name] != log_file:
+                                        self.append_log(f"🔄 Updated log file for {player_name}: {os.path.basename(log_file)}")
+                                    self.locked_log_files[player_name] = log_file
+
+                                    self.active_accounts.add(player_name_lower)
+
+                                    for account in self.accounts:
+                                        if account.get("username", "").lower() == player_name_lower:
+                                            if not account.get("active", True):
+                                                account["active"] = True
+                                                self.append_log(f"Reactivated account: {player_name}")
+                                                self.config["accounts"] = self.accounts
+                                                self.save_config()
+                                            break
 
                                     if player_name_lower not in account_usernames:
                                         if not hasattr(self, 'detected_any_accounts'):
                                             self.detected_any_accounts = True
-                                            self.append_log(f"New account detected: {player_name}. Adding to tracking.")
+                                            self.append_log(f"New account detected via load failed: {player_name}")
 
-                                            new_account = {"username": player_name, "ps_link": ""}
+                                            new_account = {"username": player_name, "ps_link": "", "active": True}
                                             self.accounts.append(new_account)
                                             self.config["accounts"] = self.accounts
                                             self.save_config()
                                             newly_found.append(player_name)
-                                    else:
-
-                                        if self.log_scan_count % 10 == 0:  
-                                            self.append_log(f"Verified log for known account: {player_name}")
-
-                            elif not player_added_index:
-                                load_failed_index = content.find("load failed in Players.")
-                                if load_failed_index != -1:
-                                    extract = content[load_failed_index + 23:]
-                                    end_index = extract.find(".")
-                                    if end_index != -1:
-                                        player_name = extract[:end_index].strip()
-
-                                        if player_name:
-                                            player_name_lower = player_name.lower()
-
-                                            if not hasattr(self, 'verified_log_files'):
-                                                self.verified_log_files = {}
-                                            self.verified_log_files[player_name] = log_file
-
-                                            if not hasattr(self, 'username_log_cache'):
-                                                self.username_log_cache = {}
-                                            self.username_log_cache[player_name] = log_file
-
-                                            if player_name_lower not in account_usernames:
-                                                if not hasattr(self, 'detected_any_accounts'):
-                                                    self.detected_any_accounts = True
-                                                    self.append_log(f"New account detected via load failed: {player_name}")
-
-                                                    new_account = {"username": player_name, "ps_link": ""}
-                                                    self.accounts.append(new_account)
-                                                    self.config["accounts"] = self.accounts
-                                                    self.save_config()
-                                                    newly_found.append(player_name)
-
-                    except Exception as e:
-                        self.error_logging(e, f"Error reading log file during account scan: {log_file}")
-                        continue
 
                 except Exception as e:
-                    self.error_logging(e, f"Error scanning log file: {log_file}")
+                    self.error_logging(e, f"Error processing log file: {log_file}")
                     continue
 
-            if newly_found or self.log_scan_count % 10 == 0:
-                self.append_log(f"Scanned {total_scanned} log files for player info. Found {len(newly_found)} new accounts.")
+            for username in detected_accounts:
+                username_lower = username.lower()
+                if username_lower in self.active_accounts and username in self.locked_log_files:
+                    log_file = self.locked_log_files[username]
+                    if os.path.exists(log_file) and current_time - os.path.getmtime(log_file) < 300:
+
+                        self.check_account_biome_in_logs(username, log_file)
+                        self.append_log(f"Performed immediate biome check for detected account: {username}")
+
+            if newly_found:
+                self.append_log(f"Found {len(newly_found)} new accounts during scan")
 
             return newly_found
 
@@ -862,7 +1050,6 @@ class BiomePresence():
 
             try:
                 if os.path.exists(error_log_path) and os.path.getsize(error_log_path) > max_log_size:
-
                     backup_path = os.path.join(self.appdata_dir, f"error_logs_backup_{int(time.time())}.txt")
                     shutil.copy2(error_log_path, backup_path)
 
@@ -870,7 +1057,6 @@ class BiomePresence():
                         f.write(f"[{timestamp}] Log file rotated due to size limit\n")
                         f.write(error_message)
                 else:
-
                     with open(error_log_path, "a") as f:
                         f.write(error_message)
             except Exception as log_error:
@@ -2347,61 +2533,43 @@ class BiomePresence():
     def save_jester_selections(self, jester_window):
         pass
 
-    def check_biome_in_logs(self):
+    def check_biome_in_logs(self, log_file_path):
+        """Check for biomes in the logs"""
         try:
-
-            log_file_path = self.get_latest_log_file()
             if not log_file_path:
                 return
 
             if not os.path.exists(log_file_path):
                 return
 
+            username = "Unknown"
+
             file_size = os.path.getsize(log_file_path)
             if file_size == 0:
                 return
 
-            if not hasattr(self, 'last_log_position'):
-
-                with open(log_file_path, 'r', encoding='utf-8', errors='ignore') as file:
-                    file.seek(0, os.SEEK_END)  
-                    self.last_log_position = file.tell()
-                self.append_log(f"Initialized log position at the end of file: {os.path.basename(log_file_path)}")
-                return  
-
             with open(log_file_path, 'r', encoding='utf-8', errors='ignore') as file:
 
-                file.seek(self.last_log_position)
+                start_content = file.read(10000)
+                lines = start_content.splitlines()
 
-                lines = file.readlines()
-
-                self.last_log_position = file.tell()
-
-            if not lines:
-                return
-
-            username = None
-            for line in lines:
-                if "Player.Name" in line or "PlayerName" in line or "Username" in line or "DisplayName" in line:
-
-                    match = re.search(r'[Pp]layer\.?[Nn]ame\s*=\s*["\']([^"\']+)["\']|[Uu]sername["\']:\s*["\']([^"\']+)["\']|[Dd]isplay[Nn]ame["\']:\s*["\']([^"\']+)["\']', line)
-                    if match:
-                        username = next((g for g in match.groups() if g), None)
-                    if username:
+                for line in lines:
+                    if "Player.Name" in line or "PlayerName" in line or "Username" in line or "DisplayName" in line:
+                        match = re.search(r'[Pp]layer\.?[Nn]ame\s*=\s*["\']([^"\']+)["\']|[Uu]sername["\']:\s*["\']([^"\']+)["\']|[Dd]isplay[Nn]ame["\']:\s*["\']([^"\']+)["\']', line)
+                        if match:
+                            username = next((g for g in match.groups() if g), None)
+                        if username:
                             self.append_log(f"Extracted username from log: {username}")
                             break
 
             if not username:
                 try:
-
                     file_name = os.path.basename(log_file_path)
 
                     if "T" in file_name and "Z" in file_name:
-
                         username = "Unknown"
                         self.append_log("Log filename contains timestamp, not using as username")
                     elif "Player" in file_name and "_" in file_name:
-
                         match = re.search(r'Player_(\d+)', file_name)
                         if match:
                             player_id = match.group(1)
@@ -2421,27 +2589,46 @@ class BiomePresence():
                 username = "Unknown"
                 self.append_log("Could not extract username, using 'Unknown'")
 
+            file.seek(0)
+            content = file.read(50000)  
+            lines = content.splitlines()
+
+            filtered_lines = []
+            for line in lines:
+                line_upper = line.upper()
+
+                if ("[WARNING]" in line_upper or "[ERROR]" in line_upper or "[DEBUG]" in line_upper or 
+                    "WARNING:" in line_upper or "ERROR:" in line_upper or "DEBUG:" in line_upper) and not any(
+                    pattern in line_upper for pattern in [
+                        "BIOME:", "BIOME ", "ENTERED ", "CURRENT BIOME", "BIOME CHANGED", "BIOME TYPE", "ENVIRONMENT:"
+                    ]):
+                    continue
+                filtered_lines.append(line)
+
             biome_found = False
 
-            for line in lines:
-                line_upper = line.upper()  
-
+            for line in lines:  
                 if "[BloxstrapRPC]" in line:
                     biome = self.get_biome_from_rpc(line)
                     if biome:
                         self.append_log(f"Found biome {biome} in RPC message")
                         self.handle_account_biome_detection(username, biome)
                         biome_found = True
-                        continue
+                        break
 
-                if biome_found:
-                    biome_found = False  
-                    continue
+            if biome_found:
+                return
+
+            for line in filtered_lines:
+                line_upper = line.upper()
 
                 for biome in self.biome_data:
                     biome_upper = biome.upper()
 
-                    if biome_upper in line_upper and any([
+                    if biome_upper not in line_upper:
+                        continue
+
+                    if any([
                         f"BIOME: {biome_upper}" in line_upper,
                         f"BIOME {biome_upper}" in line_upper,
                         f"ENTERED {biome_upper}" in line_upper,
@@ -2460,40 +2647,19 @@ class BiomePresence():
                         biome_found = True
                         break  
 
-                if biome_found:
-                    biome_found = False  
-                    continue
-
-                for biome in self.biome_data:
-                    biome_upper = biome.upper()
                     if any([
                         f'"{biome_upper}"' in line_upper,
                         f"'{biome_upper}'" in line_upper,
                         f"[{biome_upper}]" in line_upper,
-                        f"({biome_upper})" in line_upper,
-                        f"<{biome_upper}>" in line_upper,
-                        f"«{biome_upper}»" in line_upper
+                        f"({biome_upper})" in line_upper
                     ]):
                         self.append_log(f"Found biome {biome} in log with quoted pattern match")
                         self.handle_account_biome_detection(username, biome)
                         biome_found = True
-                        break  
+                        break
 
                 if biome_found:
-                    biome_found = False  
-                    continue
-
-                for biome in self.biome_data:
-                    biome_upper = biome.upper()
-
-                    if (f" {biome_upper} " in line_upper or 
-                        line_upper.startswith(f"{biome_upper} ") or 
-                        line_upper.endswith(f" {biome_upper}") or
-                        line_upper == biome_upper):
-                        self.append_log(f"Found biome {biome} in log with word boundary match")
-                        self.handle_account_biome_detection(username, biome)
-                        biome_found = True
-                        break  
+                    break
 
         except Exception as e:
             error_msg = f"Error in check_biome_in_logs: {str(e)}"
@@ -2705,9 +2871,17 @@ class BiomePresence():
 
             if self.accounts and len(self.accounts) > 0:
                 self.check_all_accounts_biomes_at_once()
-            else:
 
-                self.check_biome_in_logs()
+                if hasattr(self, 'account_biomes') and hasattr(self, 'active_accounts'):
+                    for username in list(self.account_biomes.keys()):
+                        if username.lower() not in self.active_accounts:
+                            if self.account_biomes.get(username) is not None:
+                                self.append_log(f"Clearing biome data for inactive account: {username}")
+                                self.account_biomes[username] = None
+            else:
+                log_file_path = self.get_latest_log_file()
+                if log_file_path:
+                    self.check_biome_in_logs(log_file_path)
 
             if self.config.get("enable_aura_detection", False):
                 log_file_path = self.get_latest_log_file()
@@ -2744,165 +2918,91 @@ class BiomePresence():
             if not hasattr(self, 'last_full_scan_time'):
                 self.last_full_scan_time = time.time() - 30
 
-            if not hasattr(self, 'detection_performance'):
-                self.detection_performance = {
-                    'total_checks': 0,
-                    'detection_times': [],
-                    'last_detection_time': 0
-                }
+            if not hasattr(self, 'last_log_check_message'):
+                self.last_log_check_message = {}
 
-            last_roblox_count = 0
-            current_roblox_count = 0
-            last_log_count = 0
-            check_count = 0
-
-            player_added_scan_counter = 0
-            player_added_scan_interval = 1
-
-            base_sleep_time = 0.2
-            max_sleep_time = 1.0
-            adaptive_sleep_time = 0.5
-            min_sleep_time = 0.1
-
-            long_detection_threshold = 0.5
-
-            self.append_log("Starting multi-account biome detection loop with periodic checking")
+            self.append_log("Starting multi-account biome detection loop")
 
             while self.detection_running and hasattr(self, 'root') and self.root and hasattr(self.root, 'winfo_exists') and self.root.winfo_exists():
-                check_count += 1
-                player_added_scan_counter += 1
-                loop_start_time = time.time()
-
                 try:
+                    current_time = time.time()
 
-                    if check_count % 2 == 0:
+                    if not hasattr(self, 'last_roblox_check') or current_time - self.last_roblox_check >= 10:
                         try:
                             roblox_procs = [p for p in psutil.process_iter(['name']) 
                                 if p.info['name'] and p.info['name'] == 'RobloxPlayerBeta.exe']
                             current_roblox_count = len(roblox_procs)
 
-                            if current_roblox_count != last_roblox_count:
-                                player_added_scan_counter = player_added_scan_interval
-                                self.append_log(f"Roblox process count changed: {last_roblox_count} -> {current_roblox_count}. Checking logs.")
-
-                            last_roblox_count = current_roblox_count
+                            if not hasattr(self, 'last_roblox_count') or current_roblox_count != self.last_roblox_count:
+                                self.append_log(f"Detected {current_roblox_count} active Roblox instances")
+                                self.last_roblox_count = current_roblox_count
                         except Exception as e:
                             self.error_logging(e, "Error counting Roblox processes")
-                            current_roblox_count = last_roblox_count
+                        self.last_roblox_check = current_time
 
-                    current_time = time.time()
                     if current_time - self.last_full_scan_time >= 30:
                         self.last_full_scan_time = current_time
-                        self.append_log("Performing periodic full account scan...")
-
                         if hasattr(self, 'username_log_cache'):
-                            self.username_log_cache.clear()
 
+                            pass
                         newly_found = self.scan_for_player_added_messages()
                         if newly_found:
                             self.append_log(f"Found new accounts during periodic scan: {newly_found}")
 
-                        self.check_all_accounts_biomes_at_once()
+                    if current_time - self.last_biome_check_time >= 2:
+                        self.last_biome_check_time = current_time
+                        log_files_checked = 0
 
-                        try:
-                            current_log_count = len(self.get_log_files(silent=True))
-                            if current_log_count != last_log_count:
-                                self.append_log(f"Log file count changed: {last_log_count} -> {current_log_count}")
-                            last_log_count = current_log_count
-                        except Exception as e:
-                            self.error_logging(e, "Error checking log file count")
+                        active_accounts = []
+                        for account in self.accounts:
+                            username = account.get("username", "")
+                            if username and account.get("active", True):
+                                username_lower = username.lower()
+                                if username_lower in self.active_accounts:
+                                    active_accounts.append(username)
 
-                    if player_added_scan_counter >= player_added_scan_interval:
-                        player_added_scan_counter = 0
+                                elif account.get("active", True):
+                                    self.active_accounts.add(username_lower)
+                                    active_accounts.append(username)
 
-                        unlocked_accounts = len([acc.get("username") for acc in self.accounts 
-                                              if acc.get("username") and acc.get("username").lower() not in self.locked_log_files])
+                        for username in active_accounts:
 
-                        if unlocked_accounts == 0:
-                            player_added_scan_interval = 20
-                        elif unlocked_accounts < len(self.accounts) / 2:
-                            player_added_scan_interval = 5
-                        else:
-                            player_added_scan_interval = 1
+                            log_file = None
+                            if username in self.locked_log_files:
+                                log_file = self.locked_log_files[username]
+                                if not os.path.exists(log_file) or current_time - os.path.getmtime(log_file) >= 300:
 
-                        if unlocked_accounts > 0:
-                            newly_found = self.scan_for_player_added_messages()
-                            if newly_found:
-                                self.check_all_accounts_biomes_at_once()
+                                    del self.locked_log_files[username]
+                                    log_file = None
 
-                    if check_count % 60 == 0:
-                        self.accounts = self.config.get("accounts", [])
+                            if not log_file and username in self.username_log_cache:
+                                log_file = self.username_log_cache[username]
+                                if not os.path.exists(log_file) or current_time - os.path.getmtime(log_file) >= 300:
 
-                        if check_count % 12 == 0:
-                            try:
-                                current_log_count = len(self.get_log_files(silent=True))
-                                if current_log_count > last_log_count + 1:
-                                    self.append_log(f"🔎 NEW LOGS DETECTED: Found {current_log_count - last_log_count} new log files, checking for player information...")
-                                    self.scan_for_player_added_messages()
+                                    del self.username_log_cache[username]
+                                    log_file = None
 
-                                last_log_count = current_log_count
-                            except Exception as e:
-                                self.error_logging(e, "Error checking log file count")
+                            if not log_file:
+                                log_file = self.get_log_file_for_user(username)
 
-                    current_time = time.time()
-                    time_since_last_check = current_time - self.last_biome_check_time
+                            if log_file and os.path.exists(log_file):
+                                self.check_account_biome_in_logs(username, log_file)
+                                log_files_checked += 1
 
-                    should_check_biomes = False
-
-                    if current_roblox_count > last_roblox_count:
-                        should_check_biomes = True
-                    elif hasattr(self, 'accounts') and hasattr(self, 'locked_log_files') and \
-                         len([acc.get("username") for acc in self.accounts 
-                            if acc.get("username") and acc.get("username").lower() not in self.locked_log_files]) > len(self.accounts) / 2 \
-                         and time_since_last_check >= 1.0:
-                        should_check_biomes = True
-                    elif time_since_last_check >= 3.0:
-                        should_check_biomes = True
-
-                    if should_check_biomes:
-                        check_start_time = time.time()
-                        self.check_all_accounts_biomes_at_once()
-                        check_end_time = time.time()
-                        check_duration = check_end_time - check_start_time
-
-                        self.detection_performance['total_checks'] += 1
-                        self.detection_performance['detection_times'].append(check_duration)
-                        self.detection_performance['last_detection_time'] = check_duration
-
-                        if len(self.detection_performance['detection_times']) > 10:
-                            self.detection_performance['detection_times'].pop(0)
-
-                        self.last_biome_check_time = check_end_time
-
-                        if check_duration > long_detection_threshold:
-                            self.append_log(f"⚠️ Biome detection taking longer than expected: {check_duration:.2f}s for {len(self.accounts)} accounts")
-
-                        avg_detection_time = sum(self.detection_performance['detection_times']) / len(self.detection_performance['detection_times'])
-
-                        if avg_detection_time < 0.2:
-                            adaptive_sleep_time = min_sleep_time
-                        elif avg_detection_time > 1.0:
-                            adaptive_sleep_time = max_sleep_time
-                        else:
-                            adaptive_sleep_time = min_sleep_time + ((avg_detection_time / 1.0) * (max_sleep_time - min_sleep_time))
-
-                    loop_duration = time.time() - loop_start_time
-                    sleep_time = max(0.1, adaptive_sleep_time - loop_duration)
-                    time.sleep(sleep_time)
+                    time.sleep(0.3)
 
                 except Exception as e:
-                    error_msg = f"Error in multi_account_biome_loop iteration: {str(e)}"
+                    error_msg = f"Error in multi_account_biome_loop: {str(e)}"
                     self.append_log(error_msg)
                     self.error_logging(e, error_msg)
-                    time.sleep(3)
+                    time.sleep(1)  
 
             self.append_log("Multi-account biome detection loop stopped")
 
         except Exception as e:
-            error_msg = f"Error in multi_account_biome_loop: {str(e)}"
+            error_msg = f"Fatal error in multi_account_biome_loop: {str(e)}: {traceback.format_exc()}"
             self.append_log(error_msg)
             self.error_logging(e, error_msg)
-            time.sleep(5)
 
     def check_account_biome_in_logs(self, username, log_file_path):
         """Check for biomes in the log files for a specific account"""
@@ -2919,9 +3019,30 @@ class BiomePresence():
                 self.append_log(f"Log file does not exist for account {username}: {log_file_path}")
                 return
 
+            username_lower = username.lower()
+            if hasattr(self, 'active_accounts') and username_lower not in self.active_accounts:
+
+                self.active_accounts.add(username_lower)
+                for account in self.accounts:
+                    if account.get("username", "").lower() == username_lower:
+                        if not account.get("active", True):
+                            account["active"] = True
+                            self.config["accounts"] = self.accounts
+                            self.save_config()
+                            self.append_log(f"Reactivated account {username} during log check")
+                        break
+
+            current_time = time.time()
+
+            if not hasattr(self, 'last_log_check_message'):
+                self.last_log_check_message = {}
+
+            if username not in self.last_log_check_message or current_time - self.last_log_check_message[username] >= 30:
+                self.append_log(f"Checking log file for {username}: {os.path.basename(log_file_path)}")
+                self.last_log_check_message[username] = current_time
+
             file_size = os.path.getsize(log_file_path)
             if file_size == 0:
-                self.append_log(f"Log file is empty for account {username}: {log_file_path}")
                 return
 
             if username not in self.account_biomes:
@@ -2931,236 +3052,66 @@ class BiomePresence():
                 self.account_last_positions = {}
 
             if username not in self.account_last_positions:
-                self.account_last_positions[username] = max(0, file_size - 5000)  
-
-            if not hasattr(self, 'player_added_verified_logs'):
-                self.player_added_verified_logs = set()
-
-            should_check_player_added = False
-            if log_file_path not in self.player_added_verified_logs:
-                try:
-                    if time.time() - os.path.getmtime(log_file_path) < 300:  
-                        should_check_player_added = True
-                except Exception:
-                    pass
-
-            if should_check_player_added:
-                try:
-                    with open(log_file_path, 'r', encoding='utf-8', errors='ignore') as file:
-
-                        read_size = min(50000, file_size)
-                        start_content = file.read(read_size)
-
-                        for line in start_content.split('\n'):
-                            if "Player added:" in line:
-                                try:
-
-                                    player_added_index = line.find("Player added:")
-                                    if player_added_index == -1:
-                                        continue
-
-                                    username_part = line[player_added_index + len("Player added:"):].strip()
-
-                                    if ' ' in username_part:
-                                        detected_username = username_part.rsplit(' ', 1)[0].strip()
-                                    else:
-                                        detected_username = username_part
-
-                                    if detected_username.lower() == username.lower():
-
-                                        self.append_log(f"🎮 PLAYER CONFIRMED: Username {username} verified in log file via 'Player added:' message")
-
-                                        if hasattr(self, 'username_log_cache'):
-                                            self.username_log_cache[username] = log_file_path
-                                        if hasattr(self, 'verified_log_files'):
-                                            self.verified_log_files[username] = log_file_path
-
-                                        self.player_added_verified_logs.add(log_file_path)
-                                        break  
-                                    elif detected_username and detected_username.lower() != username.lower():
-
-                                        self.append_log(f"⚠️ Warning: Log file contains 'Player added: {detected_username}' but we expected {username}")
-                                        self.append_log(f"→ This may indicate incorrect log file assignment")
-
-                                        if hasattr(self, 'username_log_cache'):
-
-                                            for account in self.accounts:
-                                                account_username = account.get("username", "").lower()
-                                                if account_username == detected_username.lower():
-                                                    self.append_log(f"🔄 PLAYER REASSIGNED: Log file reassigned to account {account_username} based on 'Player added:' message")
-                                                    old_log = self.username_log_cache.get(account_username)
-                                                    self.username_log_cache[account_username] = log_file_path
-
-                                                    if account_username in self.account_last_positions:
-                                                        self.account_last_positions[account_username] = max(0, file_size - 5000)
-
-                                                    if self.username_log_cache.get(username) == log_file_path:
-                                                        if username in self.username_log_cache:
-                                                            del self.username_log_cache[username]
-                                                        if username in self.account_last_positions:
-                                                            del self.account_last_positions[username]
-
-                                                    self.player_added_verified_logs.add(log_file_path)
-
-                                                    return
-                                except Exception as e:
-                                    self.error_logging(e, f"Error parsing 'Player added:' message for username validation: {line}")
-                except Exception as e:
-                    self.error_logging(e, f"Error reading beginning of log file for Player added messages: {log_file_path}")
+                self.account_last_positions[username] = max(0, file_size - 5000)
 
             current_position = self.account_last_positions.get(username, 0)
 
+            if current_position > file_size:
+                current_position = max(0, file_size - 5000)
+                self.account_last_positions[username] = current_position
+
             with open(log_file_path, 'r', encoding='utf-8', errors='ignore') as file:
-
-                if current_position > file_size:
-                    self.append_log(f"Log file {log_file_path} has been truncated or rotated, resetting position")
-                    current_position = max(0, file_size - 5000)  
-
                 file.seek(current_position)
+                content = file.read()
 
-                lines = file.readlines()
+                if content:
+                    self.account_last_positions[username] = file.tell()
+                else:
+                    return
 
-                self.account_last_positions[username] = file.tell()
+                if "[BloxstrapRPC]" in content:
+                    for line in content.splitlines():
+                        if "[BloxstrapRPC]" in line:
+                            biome = self.get_biome_from_rpc(line)
+                            if biome:
+                                self.append_log(f"🌍 BIOME DETECTED via RPC: Found biome '{biome}' for {username} in RPC message")
+                                self.handle_account_biome_detection(username, biome)
 
-            if not lines:
-                return
+                lines_to_check = []
+                for line in content.splitlines():
+                    line_upper = line.upper()
 
-            detected_biomes = set()
-
-            if not hasattr(self, 'player_added_verified_logs'):
-                self.player_added_verified_logs = set()
-
-            should_check_player_added = False
-            if log_file_path not in self.player_added_verified_logs:
-                try:
-                    if time.time() - os.path.getmtime(log_file_path) < 300:  
-                        should_check_player_added = True
-                except Exception:
-                    pass
-
-            if should_check_player_added:
-                for line in lines:
-                    if "Player added:" in line:
-                        try:
-
-                            player_added_index = line.find("Player added:")
-                            if player_added_index == -1:
-                                continue
-
-                            username_part = line[player_added_index + len("Player added:"):].strip()
-
-                            if ' ' in username_part:
-                                detected_username = username_part.rsplit(' ', 1)[0].strip()
-                            else:
-                                detected_username = username_part
-
-                            if detected_username.lower() == username.lower():
-
-                                self.append_log(f"🎮 PLAYER CONFIRMED: Username {username} verified in log file via 'Player added:' message")
-
-                                if hasattr(self, 'username_log_cache'):
-                                    self.username_log_cache[username] = log_file_path
-                                if hasattr(self, 'verified_log_files'):
-                                    self.verified_log_files[username] = log_file_path
-
-                                self.player_added_verified_logs.add(log_file_path)
-                                break  
-                            elif detected_username and detected_username.lower() != username.lower():
-
-                                self.append_log(f"⚠️ Warning: Log file contains 'Player added: {detected_username}' but we expected {username}")
-                                self.append_log(f"→ This may indicate incorrect log file assignment")
-
-                                if hasattr(self, 'username_log_cache'):
-
-                                    for account in self.accounts:
-                                        account_username = account.get("username", "").lower()
-                                        if account_username == detected_username.lower():
-                                            self.append_log(f"🔄 PLAYER REASSIGNED: Log file reassigned to account {account_username} based on 'Player added:' message")
-                                            old_log = self.username_log_cache.get(account_username)
-                                            self.username_log_cache[account_username] = log_file_path
-
-                                            if account_username in self.account_last_positions:
-                                                self.account_last_positions[account_username] = max(0, file_size - 5000)
-
-                                            if self.username_log_cache.get(username) == log_file_path:
-                                                if username in self.username_log_cache:
-                                                    del self.username_log_cache[username]
-                                                if username in self.account_last_positions:
-                                                    del self.account_last_positions[username]
-
-                                            self.player_added_verified_logs.add(log_file_path)
-
-                                            return
-                        except Exception as e:
-                            self.error_logging(e, f"Error parsing 'Player added:' message for username validation: {line}")
-
-            for line in lines:
-                line_upper = line.upper()  
-
-                if "[BloxstrapRPC]" in line:
-                    biome = self.get_biome_from_rpc(line)
-                    if biome and biome not in detected_biomes:
-                        self.append_log(f"Found biome {biome} in RPC message for {username}")
-                        self.handle_account_biome_detection(username, biome)
-                        detected_biomes.add(biome)
+                    if ("[WARNING]" in line_upper or "[ERROR]" in line_upper or "[DEBUG]" in line_upper or 
+                        "WARNING:" in line_upper or "ERROR:" in line_upper or "DEBUG:" in line_upper) and not any(
+                        pattern in line_upper for pattern in [
+                            "BIOME:", "BIOME ", "ENTERED ", "CURRENT BIOME", "BIOME CHANGED", "BIOME TYPE", "ENVIRONMENT:"
+                        ]):
                         continue
+                    lines_to_check.append(line)
 
-                for biome in self.biome_data:
-                    if biome in detected_biomes:
-                        continue  
+                if lines_to_check:
+                    content_to_check = "\n".join(lines_to_check)
+                    content_upper = content_to_check.upper()
 
-                    biome_upper = biome.upper()
+                    for biome in self.biome_data:
+                        biome_upper = biome.upper()
 
-                    if biome_upper in line_upper and any([
-                        f"BIOME: {biome_upper}" in line_upper,
-                        f"BIOME {biome_upper}" in line_upper,
-                        f"ENTERED {biome_upper}" in line_upper,
-                        f"BIOME:{biome_upper}" in line_upper,
-                        f"CURRENT BIOME: {biome_upper}" in line_upper,
-                        f"CURRENT BIOME {biome_upper}" in line_upper,
-                        f"BIOME CHANGED TO {biome_upper}" in line_upper,
-                        f"BIOME CHANGED: {biome_upper}" in line_upper,
-                        f"BIOME TYPE: {biome_upper}" in line_upper,
-                        f"BIOME TYPE {biome_upper}" in line_upper,
-                        f"ENVIRONMENT: {biome_upper}" in line_upper,
-                        f"ENVIRONMENT {biome_upper}" in line_upper
-                    ]):
-                        self.append_log(f"Found biome {biome} in log for {username} with specific pattern match")
-                        self.handle_account_biome_detection(username, biome)
-                        detected_biomes.add(biome)
-                        break  
-
-                for biome in self.biome_data:
-                    if biome in detected_biomes:
-                        continue  
-
-                    biome_upper = biome.upper()
-                    if any([
-                        f'"{biome_upper}"' in line_upper,
-                        f"'{biome_upper}'" in line_upper,
-                        f"[{biome_upper}]" in line_upper,
-                        f"({biome_upper})" in line_upper,
-                        f"<{biome_upper}>" in line_upper,
-                        f"«{biome_upper}»" in line_upper
-                    ]):
-                        self.append_log(f"Found biome {biome} in log for {username} with quoted pattern match")
-                        self.handle_account_biome_detection(username, biome)
-                        detected_biomes.add(biome)
-                        break  
-
-                for biome in self.biome_data:
-                    if biome in detected_biomes:
-                        continue  
-
-                    biome_upper = biome.upper()
-
-                    if (f" {biome_upper} " in line_upper or 
-                        line_upper.startswith(f"{biome_upper} ") or 
-                        line_upper.endswith(f" {biome_upper}") or
-                        line_upper == biome_upper):
-                        self.append_log(f"Found biome {biome} in log for {username} with word boundary match")
-                        self.handle_account_biome_detection(username, biome)
-                        detected_biomes.add(biome)
+                        if any(pattern in content_upper for pattern in [
+                            f"BIOME: {biome_upper}",
+                            f"BIOME {biome_upper}",
+                            f"ENTERED {biome_upper}",
+                            f"BIOME:{biome_upper}",
+                            f"CURRENT BIOME: {biome_upper}",
+                            f"CURRENT BIOME {biome_upper}",
+                            f"BIOME CHANGED TO {biome_upper}",
+                            f"BIOME CHANGED: {biome_upper}",
+                            f"BIOME TYPE: {biome_upper}",
+                            f"ENVIRONMENT: {biome_upper}",
+                            f"ENVIRONMENT {biome_upper}"
+                        ]):
+                            self.append_log(f"🌍 BIOME DETECTED via text: Found biome '{biome}' for {username}")
+                            self.handle_account_biome_detection(username, biome)
+                            break
 
         except Exception as e:
             error_msg = f"Error in check_account_biome_in_logs for user: {username} - {str(e)}"
@@ -3170,32 +3121,66 @@ class BiomePresence():
     def handle_account_biome_detection(self, username, biome):
         """Handle detection of a biome in the logs for a specific account"""
         if not username:
-            self.append_log("No username provided for biome detection")
+            error_message = "No username provided for biome detection"
+            self.append_log(error_message)
+            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {error_message}")
             return
 
         if not biome or biome not in self.biome_data:
-            self.append_log(f"Invalid biome detected for {username}: {biome}")
+            error_message = f"Invalid biome detected for {username}: {biome}"
+            self.append_log(error_message)
+            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {error_message}")
             return
 
         try:
 
+            username_lower = username.lower()
+            if hasattr(self, 'active_accounts') and username_lower not in self.active_accounts:
+
+                account_exists = False
+                for account in self.accounts:
+                    if account.get("username", "").lower() == username_lower:
+                        account_exists = True
+                        if not account.get("active", True):
+                            account["active"] = True
+                            self.active_accounts.add(username_lower)
+                            self.config["accounts"] = self.accounts
+                            self.save_config()
+                            reactivated_message = f"🔄 Reactivated account {username} for biome detection"
+                            self.append_log(reactivated_message)
+                            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {reactivated_message}")
+                        break
+
+                if not account_exists:
+                    skip_message = f"Skipping biome detection for inactive account {username}: {biome}"
+                    if self.config.get("debug_mode", False):
+                        self.append_log(skip_message)
+                    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {skip_message}")
+                    return
+
             if not hasattr(self, 'accounts') or not self.accounts:
                 self.accounts = self.config.get("accounts", [])
-                self.append_log(f"Loading accounts in biome_detect_thread: {len(self.accounts)} accounts found")
+                load_message = f"Loading accounts in biome_detect_thread: {len(self.accounts)} accounts found"
+                self.append_log(load_message)
+                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {load_message}")
 
             is_special_biome = biome in ["GLITCHED", "DREAMSPACE"]
             if is_special_biome or self.config.get("debug_mode", False):
-                self.append_log(f"Processing biome detection for {username}: {biome}")
+                processing_message = f"Processing biome detection for {username}: {biome}"
+                self.append_log(processing_message)
+                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {processing_message}")
 
             if username not in self.account_biomes:
                 self.account_biomes[username] = None
-
-                self.append_log(f"Initialized account_biomes for {username}")
+                init_message = f"Initialized account_biomes for {username}"
+                self.append_log(init_message)
+                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {init_message}")
 
             if username not in self.account_last_sent:
                 self.account_last_sent[username] = {b: datetime.min for b in self.biome_data}
-
-                self.append_log(f"Initialized account_last_sent for {username}")
+                init_sent_message = f"Initialized account_last_sent for {username}"
+                self.append_log(init_sent_message)
+                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {init_sent_message}")
 
             current_biome = self.account_biomes.get(username)
             previous_biome = current_biome
@@ -3209,12 +3194,15 @@ class BiomePresence():
                 cooldown_time = 15 if is_special_biome else 5  
 
                 if time_since_last_sent < cooldown_time:
-
                     if is_special_biome or self.config.get("debug_mode", False):
-                        self.append_log(f"Ignoring biome detection for {username}: {biome} (cooldown period: {cooldown_time - time_since_last_sent:.1f}s remaining)")
+                        cooldown_message = f"Ignoring biome detection for {username}: {biome} (cooldown period: {cooldown_time - time_since_last_sent:.1f}s remaining)"
+                        self.append_log(cooldown_message)
+                        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {cooldown_message}")
                     return
 
-                self.append_log(f"Biome change detected for {username}: {current_biome or 'None'} -> {biome}")
+                biome_change_message = f"Biome change detected for {username}: {current_biome or 'None'} -> {biome}"
+                self.append_log(biome_change_message)
+                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {biome_change_message}")
 
                 if biome in self.biome_data:
                     self.biome_counts[biome] = self.biome_counts.get(biome, 0) + 1
@@ -3222,16 +3210,16 @@ class BiomePresence():
                     if self.biome_counts[biome] % 5 == 0:  
                         self.config["biome_counts"] = self.biome_counts
                         self.save_config()
+                        count_message = f"Updated biome count for {biome}: {self.biome_counts[biome]}"
+                        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {count_message}")
 
                 self.account_biomes[username] = biome
-
                 self.account_last_sent[username][biome] = now
 
                 message_type = self.config.get("biome_notifier", {}).get(biome, "None")
 
                 notification_enabled = True
                 if "biome_notification_enabled" in self.config:
-
                     if biome in ["GLITCHED", "DREAMSPACE"]:
                         notification_enabled = True
                     else:
@@ -3251,33 +3239,42 @@ class BiomePresence():
                             prev_notification_enabled = self.config["biome_notification_enabled"].get(previous_biome, True)
 
                     if prev_message_type != "None" and prev_notification_enabled:
-                        self.append_log(f"Sending end webhook for {username}'s previous biome: {previous_biome}")
+                        end_webhook_message = f"Sending end webhook for {username}'s previous biome: {previous_biome}"
+                        self.append_log(end_webhook_message)
+                        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {end_webhook_message}")
                         webhook_tasks.append(("end", previous_biome, prev_message_type))
 
                 if message_type != "None" and notification_enabled:
-                    self.append_log(f"Sending start webhook for {username}'s biome: {biome}")
+                    start_webhook_message = f"Sending start webhook for {username}'s biome: {biome}"
+                    self.append_log(start_webhook_message)
+                    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {start_webhook_message}")
                     webhook_tasks.append(("start", biome, message_type))
                 elif biome != "NORMAL" and biome in ["GLITCHED", "DREAMSPACE"]:
-
-                    self.append_log(f"Sending special webhook for {username}'s biome: {biome}")
+                    special_webhook_message = f"Sending special webhook for {username}'s biome: {biome}"
+                    self.append_log(special_webhook_message)
+                    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {special_webhook_message}")
                     webhook_tasks.append(("start", biome, "Ping"))
 
                 for event_type, biome_name, msg_type in webhook_tasks:
                     self.send_account_webhook(username, biome_name, msg_type, event_type)
 
                 if biome in ["GLITCHED"] and self.config.get("auto_pop_glitched", False):
-                    self.append_log(f"Auto-popping buffs for {username}'s glitched biome")
+                    auto_pop_message = f"Auto-popping buffs for {username}'s glitched biome"
+                    self.append_log(auto_pop_message)
+                    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {auto_pop_message}")
 
         except Exception as e:
             error_msg = f"Error in handle_account_biome_detection for {username}: {str(e)}"
             self.append_log(error_msg)
             self.error_logging(e, error_msg)
+            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {error_msg}")
+            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Traceback: {traceback.format_exc()}")
 
     def open_accounts_manager(self):
         """Open the accounts manager window to add/edit/remove accounts"""
         accounts_window = ttk.Toplevel(self.root)
         accounts_window.title("Accounts Manager")
-        accounts_window.geometry("700x500")
+        accounts_window.geometry("750x500")
         accounts_window.resizable(True, True)
 
         main_frame = ttk.Frame(accounts_window)
@@ -3287,8 +3284,8 @@ class BiomePresence():
         header_label.pack(anchor='w', pady=(0, 10))
 
         help_text = ttk.Label(main_frame, 
-                             text="Add accounts to track multiple Roblox instances. Each account needs a username and optional private server link.",
-                             wraplength=650)
+                             text="Add accounts to track multiple Roblox instances. Each account needs a username and optional private server link. Only active accounts will be monitored.",
+                             wraplength=700)
         help_text.pack(fill='x', pady=(0, 10))
 
         container_frame = ttk.Frame(main_frame)
@@ -3306,7 +3303,7 @@ class BiomePresence():
 
         accounts_frame.bind("<Configure>", update_scroll_region)
 
-        canvas.create_window((0, 0), window=accounts_frame, anchor="nw", width=670)
+        canvas.create_window((0, 0), window=accounts_frame, anchor="nw", width=700)
         canvas.configure(yscrollcommand=scrollbar.set)
 
         def _on_mousewheel(event):
@@ -3319,42 +3316,51 @@ class BiomePresence():
 
         self.account_entries = []
 
+        header_frame = ttk.Frame(accounts_frame)
+        header_frame.pack(fill='x', pady=(0, 5))
+
+        ttk.Label(header_frame, text="Username", width=25).pack(side='left', padx=5)
+        ttk.Label(header_frame, text="Private Server Link", width=50).pack(side='left', padx=5)
+        ttk.Label(header_frame, text="Active", width=10).pack(side='left', padx=5)
+        ttk.Label(header_frame, text="Actions", width=15).pack(side='left', padx=5)
+
         def add_account_entry(account=None):
 
             username = ""
             ps_link = ""
+            is_active = True
 
             if account:
                 username = account.get("username", "")
                 ps_link = account.get("ps_link", "")
+                is_active = account.get("active", True)
 
             entry_frame = ttk.Frame(accounts_frame)
             entry_frame.pack(fill='x', pady=5)
 
-            username_label = ttk.Label(entry_frame, text="Username:", width=10)
-            username_label.pack(side='left', padx=(0, 5))
-
-            username_entry = ttk.Entry(entry_frame, width=20)
+            username_entry = ttk.Entry(entry_frame, width=25)
             username_entry.pack(side='left', padx=5)
             username_entry.insert(0, username)
 
-            ps_link_label = ttk.Label(entry_frame, text="PS Link:", width=8)
-            ps_link_label.pack(side='left', padx=(10, 5))
-
-            ps_link_entry = ttk.Entry(entry_frame, width=30)
-            ps_link_entry.pack(side='left', fill='x', expand=True, padx=5)
+            ps_link_entry = ttk.Entry(entry_frame, width=50)
+            ps_link_entry.pack(side='left', padx=5)
             ps_link_entry.insert(0, ps_link)
+
+            active_var = tk.BooleanVar(value=is_active)
+            active_check = ttk.Checkbutton(entry_frame, variable=active_var)
+            active_check.pack(side='left', padx=(20, 5))
 
             def remove_account():
                 entry_frame.destroy()
-                self.account_entries.remove((username_entry, ps_link_entry))
+                self.account_entries.remove((username_entry, ps_link_entry, active_var))
 
             remove_btn = ttk.Button(entry_frame, text="Remove", 
                                    command=remove_account,
-                                   style="danger.TButton")
-            remove_btn.pack(side='right', padx=5)
+                                   style="danger.TButton",
+                                   width=10)
+            remove_btn.pack(side='left', padx=5)
 
-            self.account_entries.append((username_entry, ps_link_entry))
+            self.account_entries.append((username_entry, ps_link_entry, active_var))
 
         for account in self.accounts:
             add_account_entry(account)
@@ -3367,17 +3373,28 @@ class BiomePresence():
         def save_accounts():
 
             self.accounts = []
-            for username_entry, ps_link_entry in self.account_entries:
+            for username_entry, ps_link_entry, active_var in self.account_entries:
                 username = username_entry.get().strip()
                 ps_link = ps_link_entry.get().strip()
+                is_active = active_var.get()
 
                 if username:  
                     self.accounts.append({
                         "username": username,
-                        "ps_link": ps_link
+                        "ps_link": ps_link,
+                        "active": is_active
                     })
 
                 self.save_config()
+
+            if not hasattr(self, 'active_accounts'):
+                self.active_accounts = set()
+            else:
+                self.active_accounts.clear()
+
+            for account in self.accounts:
+                if account.get("active", True):
+                    self.active_accounts.add(account.get("username", "").lower())
 
             accounts_window.destroy()
 
@@ -3449,13 +3466,17 @@ class BiomePresence():
                         custom_description += "\n### Tracked Accounts:\n"
                         for account in filtered_accounts:
                             username = account.get("username", "Unknown")
-                            custom_description += f"- {username}\n"
+                            is_active = account.get("active", True)
+                            status_icon = "✅" if is_active else "❌"
+                            custom_description += f"- {username} {status_icon}\n"
                 elif self.accounts:
 
                     custom_description += "\n### Tracked Accounts:\n"
                     for account in self.accounts:
                         username = account.get("username", "Unknown")
-                        custom_description += f"- {username}\n"
+                        is_active = account.get("active", True)
+                        status_icon = "✅" if is_active else "❌"
+                        custom_description += f"- {username} {status_icon}\n"
 
                 timestamp_discord = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
@@ -3693,12 +3714,15 @@ class BiomePresence():
 
     def start_detection(self):
         """Start the biome detection thread"""
-        if self.detection_running:
-            self.append_log("Biome detection is already running.")
-            return
-
         try:
+            if hasattr(self, 'detection_running') and self.detection_running:
+                self.append_log("Biome detection is already running.")
+                return False
 
+            if not hasattr(self, 'detection_thread'):
+                self.detection_thread = None
+
+            self.append_log("Starting biome detection...")
             self.detection_running = True
 
             self.start_time = datetime.now()
@@ -3707,7 +3731,6 @@ class BiomePresence():
             self.root.title(f"BiomeScope | Version {self.version} (Running)")
 
             if self.detection_thread is None or not self.detection_thread.is_alive():
-
                 self.account_biomes = {}
                 self.account_last_positions = {}
                 self.account_last_sent = {}
@@ -3715,11 +3738,29 @@ class BiomePresence():
                     self.player_added_verified_logs = set()
 
                 self.accounts = self.config.get("accounts", [])
-                self.append_log(f"Loaded {len(self.accounts)} accounts from config")
+
+                if not hasattr(self, 'active_accounts'):
+                    self.active_accounts = set()
+                else:
+                    self.active_accounts.clear()
+
+                active_account_count = 0
+                for account in self.accounts:
+                    username = account.get("username", "Unknown")
+                    ps_link = account.get("ps_link", "No PS Link")
+                    is_active = account.get("active", True)
+
+                    if is_active:
+                        self.active_accounts.add(username.lower())
+                        active_account_count += 1
+
+                self.append_log(f"Loaded {len(self.accounts)} accounts, {active_account_count} active")
                 for i, account in enumerate(self.accounts, 1):
                     username = account.get("username", "Unknown")
                     ps_link = account.get("ps_link", "No PS Link")
-                    self.append_log(f"Account {i}: {username}, PS Link: {ps_link}")
+                    is_active = account.get("active", True)
+                    status = "Active" if is_active else "Inactive"
+                    self.append_log(f"Account {i}: {username}, PS Link: {ps_link}, Status: {status}")
 
                 self.append_log("🔍 INITIAL SCAN: Searching for active log files and player information...")
                 all_log_files = self.get_log_files(silent=True)
@@ -3735,7 +3776,6 @@ class BiomePresence():
 
                 self.append_log(f"Found {len(active_logs)} active log files out of {len(all_log_files)} total logs")
                 if active_logs:
-
                     self.scan_for_player_added_messages()
 
                 if len(self.accounts) > 0:
@@ -3754,7 +3794,7 @@ class BiomePresence():
                 self.append_log("Detection thread already exists and is running.")
                 return False
         except Exception as e:
-            error_msg = f"Error starting biome detection: {str(e)}"
+            error_msg = f"Error starting biome detection: {str(e)}: {traceback.format_exc()}"
             self.append_log(error_msg)
             self.error_logging(e, error_msg)
             self.detection_running = False
@@ -3791,12 +3831,27 @@ class BiomePresence():
         print("Biome detection stopped.")
 
     def get_log_file_for_user(self, username):
-        """Get the log file for a specific user, similar to AHK's getLogFilefromUser"""
+        """Get the log file for a specific user"""
         if not username:
             self.append_log("No username provided for log file search")
             return None
 
         try:
+
+            account_active = False
+            username_lower = username.lower()
+            for account in self.accounts:
+                if account.get("username", "").lower() == username_lower:
+                    account_active = account.get("active", True)
+                    break
+
+            if not account_active:
+                if not hasattr(self, 'inactive_account_logged') or time.time() - self.inactive_account_logged.get(username, 0) > 300:
+                    self.append_log(f"Account {username} is marked as inactive. Skipping log file search.")
+                    if not hasattr(self, 'inactive_account_logged'):
+                        self.inactive_account_logged = {}
+                    self.inactive_account_logged[username] = time.time()
+                return None
 
             sorted_files = self.get_log_files(silent=True)
 
@@ -3812,32 +3867,39 @@ class BiomePresence():
                 cached_file = self.username_log_cache[username]
 
                 if cached_file in sorted_files:
-
                     try:
+
                         if time.time() - os.path.getmtime(cached_file) < 300:
                             return cached_file
+                        else:
+
+                            self.append_log(f"Cached log file for {username} is too old. Looking for a new one.")
+                            del self.username_log_cache[username]
+                            if username in self.locked_log_files:
+                                del self.locked_log_files[username]
                     except Exception:
-                        pass
+
+                        del self.username_log_cache[username]
+                        if username in self.locked_log_files:
+                            del self.locked_log_files[username]
 
             current_time = time.time()
 
             player_added_pattern = f"Player added: {username}"
+            load_failed_pattern = f"load failed in Players.{username}"
 
-            for file_path in sorted_files:
+            recent_files = [f for f in sorted_files if current_time - os.path.getmtime(f) < 300]
+            self.append_log(f"Searching {len(recent_files)} recent log files for {username}...")
 
-                if current_time - os.path.getmtime(file_path) > 300:
-                    continue
-
+            for file_path in recent_files:
                 try:
-
                     with open(file_path, 'r', encoding='utf-8', errors='ignore') as file:
-
                         file_size = os.path.getsize(file_path)
                         read_size = min(50000, file_size)
                         file.seek(max(0, file_size - read_size))
                         content = file.read(read_size)
 
-                        if player_added_pattern in content:
+                        if player_added_pattern in content or load_failed_pattern in content:
                             self.append_log(f"✅ Found log file for {username}: {os.path.basename(file_path)}")
 
                             if not hasattr(self, 'username_log_cache'):
@@ -3848,30 +3910,15 @@ class BiomePresence():
                                 self.verified_log_files = {}
                             self.verified_log_files[username] = file_path
 
+                            if not hasattr(self, 'locked_log_files'):
+                                self.locked_log_files = {}
+                            self.locked_log_files[username] = file_path
+
                             if not hasattr(self, 'player_added_verified_logs'):
                                 self.player_added_verified_logs = set()
                             self.player_added_verified_logs.add(file_path)
 
                             return file_path
-
-                        load_failed_index = content.find("load failed in Players.")
-                        if load_failed_index != -1:
-                            extract = content[load_failed_index + 23:]
-                            end_index = extract.find(".")
-                            if end_index != -1:
-                                extracted_name = extract[:end_index].strip()
-                                if extracted_name.lower() == username.lower():
-                                    self.append_log(f"✅ Found log file for {username} via load failed: {os.path.basename(file_path)}")
-
-                                    if not hasattr(self, 'username_log_cache'):
-                                        self.username_log_cache = {}
-                                    self.username_log_cache[username] = file_path
-
-                                    if not hasattr(self, 'verified_log_files'):
-                                        self.verified_log_files = {}
-                                    self.verified_log_files[username] = file_path
-
-                                    return file_path
 
                 except Exception as e:
                     self.error_logging(e, f"Error checking log file: {file_path}")
@@ -4291,7 +4338,7 @@ class BiomePresence():
             return None
 
     def get_biome_from_rpc(self, rpc_message):
-        """Extract biome name from RPC message, similar to AHK script's getBiome function"""
+        """Extract biome name from RPC message"""
         try:
             if "[BloxstrapRPC]" not in rpc_message:
                 return None
@@ -4511,8 +4558,6 @@ def get_user_activity_data(self, username, days_back=30):
                     action = "Biome"
                 elif "webhook" in line.lower():
                     action = "Webhook"
-                elif "aura" in line.lower():
-                    action = "Aura"
                 elif "buff" in line.lower() or "potion" in line.lower():
                     action = "Buff"
                 elif "merchant" in line.lower() or "mari" in line.lower() or "jester" in line.lower():
@@ -4569,9 +4614,9 @@ try:
     biome_presence = BiomePresence()
 except KeyboardInterrupt:
     print("Exited (Keyboard Interrupted)")
+except Exception as e:
+    print(f"Error initializing BiomeScope: {str(e)}")
 finally:
-
     if 'biome_presence' in locals() and hasattr(biome_presence, 'antiafk'):
         biome_presence.antiafk.shutdown()
-
     keyboard.unhook_all()

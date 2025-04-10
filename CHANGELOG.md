@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.5-Testing] - 2025-04-08
+
+### Changed
+- Updated version identifiers for stability release
+- Removed redundant version assignment in initialization
+- Cleaned up code comments for better maintainability
+- Optimized log file processing with cleaner code structure
+
+### Fixed
+- Improved account detection and tracking logic
+- Enhanced log file management and caching system
+- Streamlined biome detection process with better error handling
+- Optimized memory usage 
+- Refined active account management system
+- Improved log file scanning efficiency
+- Enhanced error handling in log processing
+- Removed unnecessary debug comments 
+- Streamlined RPC message processing
+- Optimized account status tracking
+
+### Removed
+- Cleaned up unnecessary debug logging
+- Removed Aura detection from activity tracking (Broken pieces of code)
+
 ## [1.0.4-Beta] - 2025-04-07
 
 ### Added
@@ -116,7 +140,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Session time tracking bugs
 - UI responsiveness in high DPI displays
 
-[Unreleased]: https://github.com/cresqnt-sys/BiomeScope/compare/v1.0.4-Beta...HEAD
+[Unreleased]: https://github.com/cresqnt-sys/BiomeScope/compare/v1.0.5-Stable...HEAD
+[1.0.5-Stable]: https://github.com/cresqnt-sys/BiomeScope/compare/v1.0.4-Beta...v1.0.5-Stable
 [1.0.4-Beta]: https://github.com/cresqnt-sys/BiomeScope/compare/v1.0.3-Stable...v1.0.4-Beta
 [1.0.3-Stable]: https://github.com/cresqnt-sys/BiomeScope/compare/v1.0.3-Testing2...v1.0.3-Stable
 [1.0.3-Testing2]: https://github.com/cresqnt-sys/BiomeScope/compare/v1.0.3-Testing...v1.0.3-Testing2
