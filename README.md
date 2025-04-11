@@ -66,6 +66,6 @@ This project is licensed under the GNU Affero GPL v3.0 License - see the [LICENS
 If you encounter any issues or have questions, please:
 1. Check the [Issues](https://github.com/cresqnt-sys/BiomeScope/issues) page
 2. Create a new issue if your problem isn't already listed
-3. Discord support server coming soon.
+3. Join our [Discord Server](https://discord.gg/6cuCu6ymkX)!
 
 If you like the project please ⭐ the repo!
