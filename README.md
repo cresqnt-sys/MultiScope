@@ -11,7 +11,8 @@ A hard-fork of Noteab's Noteab Macro.
 - Multi Webhook Support
 - Better Error Handling
 - Better timed embeds
-- Automatic Feature Flag Configuration
+- Extremely low CPU and RAM usage
+- Maintaining almost instant detections (30 Accounts)
 - More to come
 
 
