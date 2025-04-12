@@ -11,7 +11,7 @@ A hard-fork of Noteab's Noteab Macro.
 - Multi Webhook Support
 - Better Error Handling
 - Better timed embeds
-- Extremely low CPU and RAM usage
+- Extremely low CPU and RAM usage (Around 50x more efficient and 7.493x faster than competition) 
 - Maintaining almost instant detections (30 Accounts)
 - More to come
 
