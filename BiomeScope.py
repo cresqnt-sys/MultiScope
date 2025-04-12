@@ -30,7 +30,7 @@ import shutil
 import winreg
 
 if hasattr(sys, 'frozen'):  
-    myappid = 'BiomeScope.App.1.0.5.Testing'
+    myappid = 'BiomeScope.App.1.0.5.Testing2'
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
 
 try:
@@ -102,7 +102,7 @@ class SnippingWidget:
 class BiomePresence():
     def __init__(self):
         try:
-            self.version = "1.0.5-Testing"
+            self.version = "1.0.5-Testing2"
             self.detection_running = False
             locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
         except locale.Error:
@@ -112,12 +112,20 @@ class BiomePresence():
         os.makedirs(self.appdata_dir, exist_ok=True)
 
         self.logs_dir = os.path.join(os.getenv('LOCALAPPDATA'), 'Roblox', 'logs')
-
+        
+        # Store startup time to ignore older logs
+        self.startup_timestamp = time.time()
+        self.last_directory_scan = 0
+        self.last_config_reload = 0
+        
         self.logs = self.load_logs()
-
         self.biome_data = self.load_biome_data()
         self.config = self.load_config()
         self.auras_data = self.load_auras_json()
+
+        # Start background threads for monitoring
+        self.start_log_monitor_thread()
+        self.start_config_reload_thread()
 
         self.setup_feature_flags()
 
@@ -279,6 +287,145 @@ class BiomePresence():
         except Exception as e:
             self.error_logging(e, "Error setting up feature flags")
 
+    def start_log_monitor_thread(self):
+        """Start a background thread to monitor log directory for changes"""
+        self.log_monitor_thread = threading.Thread(target=self.monitor_log_directory, daemon=True)
+        self.log_monitor_thread.start()
+        self.append_log("Started log directory monitoring thread")
+    
+    def start_config_reload_thread(self):
+        """Start a background thread to reload config periodically"""
+        self.config_reload_thread = threading.Thread(target=self.reload_config_periodically, daemon=True)
+        self.config_reload_thread.start()
+        self.append_log("Started config reload thread")
+    
+    def monitor_log_directory(self):
+        """Monitor the logs directory for modified files every 3 minutes"""
+        try:
+            while True:
+                current_time = time.time()
+                
+                # Only scan every 3 minutes (180 seconds)
+                if current_time - self.last_directory_scan >= 180:
+                    self.last_directory_scan = current_time
+                    self.append_log("Scanning log directory for new files...")
+                    
+                    log_files = self.get_log_files_since_startup()
+                    if log_files:
+                        self.append_log(f"Found {len(log_files)} new log files since startup")
+                        
+                        # Process each log file for active accounts
+                        for log_file in log_files:
+                            self.match_log_file_to_accounts(log_file)
+                
+                # Sleep for 5 seconds before checking again
+                time.sleep(5)
+        except Exception as e:
+            error_msg = f"Error in log directory monitoring: {str(e)}"
+            self.append_log(error_msg)
+            self.error_logging(e, error_msg)
+    
+    def reload_config_periodically(self):
+        """Reload configuration from JSON file every 0.5 seconds"""
+        try:
+            while True:
+                current_time = time.time()
+                
+                # Reload every 0.5 seconds
+                if current_time - self.last_config_reload >= 0.5:
+                    self.last_config_reload = current_time
+                    self.config = self.load_config()
+                    
+                    # Update account list and active status
+                    self.accounts = self.config.get("accounts", [])
+                    
+                    # Update webhook configurations
+                    self.webhooks = self.config.get("webhooks", [])
+                    
+                    # Update biome notification settings
+                    self.biome_notification_enabled = self.config.get("biome_notification_enabled", {})
+                    self.biome_notifier = self.config.get("biome_notifier", {})
+                
+                # Sleep briefly to prevent CPU hogging
+                time.sleep(0.1)
+        except Exception as e:
+            error_msg = f"Error in config reload thread: {str(e)}"
+            self.append_log(error_msg)
+            self.error_logging(e, error_msg)
+    
+    def get_log_files_since_startup(self):
+        """Get log files modified after startup that match filename criteria"""
+        try:
+            if not os.path.exists(self.logs_dir):
+                self.append_log(f"Logs directory not found: {self.logs_dir}")
+                return []
+            
+            log_files = []
+            current_time = time.time()
+            
+            for filename in os.listdir(self.logs_dir):
+                if not filename.endswith('.log'):
+                    continue
+                
+                # Only consider files with "player" and "last" in filename
+                if "player" in filename.lower() and "last" in filename.lower():
+                    full_path = os.path.join(self.logs_dir, filename)
+                    
+                    try:
+                        if os.path.isfile(full_path) and os.path.getsize(full_path) > 0:
+                            mod_time = os.path.getmtime(full_path)
+                            
+                            # Only include files modified after startup
+                            if mod_time > self.startup_timestamp:
+                                log_files.append(full_path)
+                    except (OSError, IOError):
+                        continue
+            
+            return log_files
+        except Exception as e:
+            error_msg = f"Error getting log files since startup: {str(e)}"
+            self.append_log(error_msg)
+            self.error_logging(e, error_msg)
+            return []
+    
+    def match_log_file_to_accounts(self, log_file_path):
+        """Match a log file to active accounts by parsing for usernames in log content"""
+        try:
+            if not os.path.exists(log_file_path):
+                return
+            
+            # Get active accounts from config
+            active_accounts = []
+            for account in self.accounts:
+                if account.get("active", True):
+                    username = account.get("username", "").lower()
+                    if username:
+                        active_accounts.append(username)
+            
+            if not active_accounts:
+                return
+            
+            # Read the beginning of the file to look for usernames
+            with open(log_file_path, 'r', encoding='utf-8', errors='ignore') as file:
+                content = file.read(50000)
+                
+                # Look for "Player added:" or "load failed in Players." patterns
+                for account_username in active_accounts:
+                    if f"Player added: {account_username}" in content.lower() or f"load failed in Players.{account_username}" in content.lower():
+                        self.append_log(f"Matched log file to account: {account_username}")
+                        
+                        # Cache this log file for the account
+                        if not hasattr(self, 'username_log_cache'):
+                            self.username_log_cache = {}
+                        self.username_log_cache[account_username] = log_file_path
+                        
+                        # Check for biomes in this log
+                        self.check_account_biome_in_logs(account_username, log_file_path)
+        except Exception as e:
+            error_msg = f"Error matching log file to accounts: {str(e)}"
+            self.append_log(error_msg)
+            self.error_logging(e, error_msg)
+            
     def check_all_accounts_biomes_at_once(self):
         """Check all accounts' logs for biomes in parallel"""
         try:
@@ -662,7 +809,7 @@ class BiomePresence():
                 self.append_log("No log files to check for biomes")
                 return
 
-            with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, min(16, len(log_files_to_check) * 2))) as executor:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, min(16, max(1, len(log_files_to_check) * 2)))) as executor:
                 future_to_username = {}
 
                 for username, log_file in log_files_to_check.items():
@@ -1770,17 +1917,18 @@ class BiomePresence():
                                width=15)
         configure_biomes_btn.pack(side="left", padx=5)
 
-        stop_btn = ttk.Button(bottom_frame, text="Stop (F2)", 
+        # Store references to the buttons so we can update them later
+        self.stop_detection_btn = ttk.Button(bottom_frame, text="Stop (F2)", 
                              command=self.stop_detection,
                              style="danger.TButton",
                              width=12)
-        stop_btn.pack(side="right", padx=5)
+        self.stop_detection_btn.pack(side="right", padx=5)
 
-        start_btn = ttk.Button(bottom_frame, text="Start (F1)", 
+        self.start_detection_btn = ttk.Button(bottom_frame, text="Start (F1)", 
                               command=self.start_detection,
                               style="success.TButton",
                               width=12)
-        start_btn.pack(side="right", padx=5)
+        self.start_detection_btn.pack(side="right", padx=5)
 
         self.webhook_entries = []
         webhooks = self.config.get("webhooks", [])
@@ -2494,11 +2642,13 @@ class BiomePresence():
         support_frame = ttk.LabelFrame(frame, text="Support")
         support_frame.pack(fill="x", padx=20, pady=10)
 
-        discord_label = ttk.Label(support_frame, text="Discord Server: Soon")
+        discord_label = ttk.Label(support_frame, text="Discord Server: https://discord.gg/6cuCu6ymkX", cursor="hand2", foreground="#0066cc")
         discord_label.pack(anchor="w", padx=10, pady=5)
+        discord_label.bind("<Button-1>", lambda e: webbrowser.open("https://discord.gg/6cuCu6ymkX"))
 
-        github_label = ttk.Label(support_frame, text="GitHub: https://github.com/cresqnt/BiomeScope")
+        github_label = ttk.Label(support_frame, text="GitHub: https://github.com/cresqnt-sys/BiomeScope", cursor="hand2", foreground="#0066cc")
         github_label.pack(anchor="w", padx=10, pady=5)
+        github_label.bind("<Button-1>", lambda e: webbrowser.open("https://github.com/cresqnt-sys/BiomeScope"))
 
         copyright_label = ttk.Label(frame, text="© 2025 cresqnt. All rights reserved.")
         copyright_label.pack(side="bottom", pady=20)
@@ -2549,7 +2699,7 @@ class BiomePresence():
                 return
 
             with open(log_file_path, 'r', encoding='utf-8', errors='ignore') as file:
-
+                # Extract username from log file
                 start_content = file.read(10000)
                 lines = start_content.splitlines()
 
@@ -2562,32 +2712,14 @@ class BiomePresence():
                             self.append_log(f"Extracted username from log: {username}")
                             break
 
-            if not username:
-                try:
-                    file_name = os.path.basename(log_file_path)
-
-                    if "T" in file_name and "Z" in file_name:
-                        username = "Unknown"
-                        self.append_log("Log filename contains timestamp, not using as username")
-                    elif "Player" in file_name and "_" in file_name:
-                        match = re.search(r'Player_(\d+)', file_name)
-                        if match:
-                            player_id = match.group(1)
-                            username = f"Player_{player_id}"
-                            self.append_log(f"Extracted player ID from filename: {username}")
-                        else:
-                            username = "Unknown"
-                            self.append_log("Could not extract player ID from filename")
-                    else:
-                        username = "Unknown"
-                        self.append_log("Could not extract username from filename")
-                except Exception as e:
-                    self.error_logging(e, "Error extracting username from file name")
-                    username = "Unknown"
-
-            if not username:
-                username = "Unknown"
-                self.append_log("Could not extract username, using 'Unknown'")
+            # Initialize timestamp tracking for this username if not exists
+            if not hasattr(self, 'account_last_timestamp'):
+                self.account_last_timestamp = {}
+                
+            if username not in self.account_last_timestamp:
+                # Start with current time (only process new messages from now on)
+                self.account_last_timestamp[username] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+                self.append_log(f"Initialized last timestamp for {username}: {self.account_last_timestamp[username]}")
 
             file.seek(0)
             content = file.read(50000)  
@@ -2595,39 +2727,68 @@ class BiomePresence():
 
             filtered_lines = []
             for line in lines:
+                # Extract timestamp and skip old lines
+                timestamp_match = re.match(r'^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})', line)
+                if not timestamp_match:
+                    continue
+                
+                timestamp = timestamp_match.group(1)
+                if timestamp <= self.account_last_timestamp.get(username, ""):
+                    continue
+                    
                 line_upper = line.upper()
 
+                # Filter out most warning/error lines but keep those that might contain biome info
                 if ("[WARNING]" in line_upper or "[ERROR]" in line_upper or "[DEBUG]" in line_upper or 
                     "WARNING:" in line_upper or "ERROR:" in line_upper or "DEBUG:" in line_upper) and not any(
                     pattern in line_upper for pattern in [
                         "BIOME:", "BIOME ", "ENTERED ", "CURRENT BIOME", "BIOME CHANGED", "BIOME TYPE", "ENVIRONMENT:"
                     ]):
                     continue
-                filtered_lines.append(line)
+                filtered_lines.append((timestamp, line))
 
             biome_found = False
 
-            for line in lines:  
+            # First check for biomes in RPC messages
+            rpc_biomes = []
+            for line in lines:
                 if "[BloxstrapRPC]" in line:
-                    biome = self.get_biome_from_rpc(line)
-                    if biome:
-                        self.append_log(f"Found biome {biome} in RPC message")
-                        self.handle_account_biome_detection(username, biome)
-                        biome_found = True
-                        break
+                    try:
+                        # Extract timestamp from log line
+                        timestamp_match = re.match(r'^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})', line)
+                        if timestamp_match:
+                            timestamp = timestamp_match.group(1)
+                            # Only process entries newer than last processed timestamp
+                            if timestamp > self.account_last_timestamp.get(username, ""):
+                                biome = self.get_biome_from_rpc(line)
+                                if biome:
+                                    rpc_biomes.append((timestamp, biome, line))
+                    except Exception as e:
+                        self.append_log(f"Error parsing timestamp from line: {e}")
+            
+            # Sort by timestamp (oldest first)
+            rpc_biomes.sort(key=lambda x: x[0])
+            
+            # Process all new biome entries in chronological order
+            for timestamp, biome, line in rpc_biomes:
+                self.append_log(f"🌍 BIOME DETECTED via RPC: Found biome '{biome}' for {username} at {timestamp}")
+                self.append_log(f"Line: {line}")
+                self.handle_account_biome_detection(username, biome)
+                # Update the last processed timestamp
+                self.account_last_timestamp[username] = timestamp
+                biome_found = True
 
             if biome_found:
                 return
 
-            for line in filtered_lines:
+            # Then check filtered lines for specific patterns
+            for timestamp, line in filtered_lines:
                 line_upper = line.upper()
 
                 for biome in self.biome_data:
                     biome_upper = biome.upper()
 
-                    if biome_upper not in line_upper:
-                        continue
-
+                    # Check for specific patterns that indicate a biome change
                     if any([
                         f"BIOME: {biome_upper}" in line_upper,
                         f"BIOME {biome_upper}" in line_upper,
@@ -2640,23 +2801,22 @@ class BiomePresence():
                         f"BIOME TYPE: {biome_upper}" in line_upper,
                         f"BIOME TYPE {biome_upper}" in line_upper,
                         f"ENVIRONMENT: {biome_upper}" in line_upper,
-                        f"ENVIRONMENT {biome_upper}" in line_upper
+                        f"ENVIRONMENT {biome_upper}" in line_upper,
+                        # Also check for quoted/bracketed patterns, but only if they're standalone
+                        f'"{biome_upper}"' in line_upper and not any(error_term in line_upper for error_term in ["ERROR", "WARNING", "DEBUG", "EXCEPTION", "FAILED"]),
+                        f"'{biome_upper}'" in line_upper and not any(error_term in line_upper for error_term in ["ERROR", "WARNING", "DEBUG", "EXCEPTION", "FAILED"]),
+                        f"[{biome_upper}]" in line_upper and not any(error_term in line_upper for error_term in ["ERROR", "WARNING", "DEBUG", "EXCEPTION", "FAILED"]),
+                        f"({biome_upper})" in line_upper and not any(error_term in line_upper for error_term in ["ERROR", "WARNING", "DEBUG", "EXCEPTION", "FAILED"])
                     ]):
-                        self.append_log(f"Found biome {biome} in log with specific pattern match")
+                        # Log both the detected biome and the line for debugging
+                        self.append_log(f"🌍 BIOME DETECTED via text: Found biome '{biome}' for {username} at {timestamp}")
+                        self.append_log(f"Line content: {line}")
+                        
                         self.handle_account_biome_detection(username, biome)
+                        # Update the last processed timestamp
+                        self.account_last_timestamp[username] = timestamp
                         biome_found = True
                         break  
-
-                    if any([
-                        f'"{biome_upper}"' in line_upper,
-                        f"'{biome_upper}'" in line_upper,
-                        f"[{biome_upper}]" in line_upper,
-                        f"({biome_upper})" in line_upper
-                    ]):
-                        self.append_log(f"Found biome {biome} in log with quoted pattern match")
-                        self.handle_account_biome_detection(username, biome)
-                        biome_found = True
-                        break
 
                 if biome_found:
                     break
@@ -2988,7 +3148,7 @@ class BiomePresence():
                             if log_file and os.path.exists(log_file):
                                 self.check_account_biome_in_logs(username, log_file)
                                 log_files_checked += 1
-
+                    
                     time.sleep(0.3)
 
                 except Exception as e:
@@ -3021,8 +3181,12 @@ class BiomePresence():
 
             username_lower = username.lower()
             if hasattr(self, 'active_accounts') and username_lower not in self.active_accounts:
-
+                # Add to active accounts if not already there
+                if not hasattr(self, 'active_accounts'):
+                    self.active_accounts = set()
                 self.active_accounts.add(username_lower)
+                
+                # Update account active status in config if needed
                 for account in self.accounts:
                     if account.get("username", "").lower() == username_lower:
                         if not account.get("active", True):
@@ -3045,6 +3209,9 @@ class BiomePresence():
             if file_size == 0:
                 return
 
+            if not hasattr(self, 'account_biomes'):
+                self.account_biomes = {}
+                
             if username not in self.account_biomes:
                 self.account_biomes[username] = None
 
@@ -3054,9 +3221,24 @@ class BiomePresence():
             if username not in self.account_last_positions:
                 self.account_last_positions[username] = max(0, file_size - 5000)
 
+            # Save the current time in ISO format to use as reference for filtering old log entries
+            if not hasattr(self, 'program_start_time_iso'):
+                self.program_start_time_iso = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+                self.append_log(f"Program start time set to: {self.program_start_time_iso}")
+
+            # Initialize timestamp tracking structure if needed
+            if not hasattr(self, 'account_last_timestamp'):
+                self.account_last_timestamp = {}
+                
+            if username not in self.account_last_timestamp:
+                # Use the program start time as the initial timestamp
+                self.account_last_timestamp[username] = self.program_start_time_iso
+                self.append_log(f"Initialized last timestamp for {username} to program start time: {self.account_last_timestamp[username]}")
+
             current_position = self.account_last_positions.get(username, 0)
 
             if current_position > file_size:
+                # File was truncated or recreated, start from beginning
                 current_position = max(0, file_size - 5000)
                 self.account_last_positions[username] = current_position
 
@@ -3069,49 +3251,107 @@ class BiomePresence():
                 else:
                     return
 
+                # First check for biomes in RPC messages (faster)
                 if "[BloxstrapRPC]" in content:
+                    # Collect all RPC biome entries with their timestamps
+                    rpc_biomes = []
+                    
                     for line in content.splitlines():
                         if "[BloxstrapRPC]" in line:
-                            biome = self.get_biome_from_rpc(line)
-                            if biome:
-                                self.append_log(f"🌍 BIOME DETECTED via RPC: Found biome '{biome}' for {username} in RPC message")
-                                self.handle_account_biome_detection(username, biome)
+                            try:
+                                # Extract timestamp from log line
+                                timestamp_match = re.match(r'^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})', line)
+                                if timestamp_match:
+                                    timestamp = timestamp_match.group(1)
+                                    
+                                    # STRICT FILTERING: Only process entries that are newer than program start time
+                                    if timestamp < self.program_start_time_iso:
+                                        continue
+                                        
+                                    # Only process entries newer than last processed timestamp
+                                    if timestamp > self.account_last_timestamp.get(username, ""):
+                                        biome = self.get_biome_from_rpc(line)
+                                        if biome:
+                                            rpc_biomes.append((timestamp, biome, line))
+                            except Exception as e:
+                                self.append_log(f"Error parsing timestamp from line: {e}")
+                    
+                    # If we found biomes, log how many for debugging
+                    if rpc_biomes:
+                        self.append_log(f"Found {len(rpc_biomes)} new biome entries for {username} after filtering")
+                    
+                    # Sort by timestamp (newest last)
+                    rpc_biomes.sort(key=lambda x: x[0])
+                    
+                    # Process all new biome entries in chronological order
+                    for timestamp, biome, line in rpc_biomes:
+                        # Final check to ensure timestamp is valid
+                        current_timestamp = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+                        if timestamp > current_timestamp:
+                            self.append_log(f"Skipping future timestamp: {timestamp} > {current_timestamp}")
+                            continue
+                            
+                        self.append_log(f"🌍 BIOME DETECTED via RPC: Found biome '{biome}' for {username} in RPC message at {timestamp}")
+                        # self.append_log(f"Line: {line}")
+                        self.handle_account_biome_detection(username, biome)
+                        # Update the last processed timestamp
+                        self.account_last_timestamp[username] = timestamp
 
-                lines_to_check = []
+                # Then check for biomes in the log content - process each line individually
                 for line in content.splitlines():
+                    # Skip if already processed based on timestamp
+                    timestamp_match = re.match(r'^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})', line)
+                    if not timestamp_match:
+                        continue
+                    
+                    timestamp = timestamp_match.group(1)
+                    
+                    # STRICT FILTERING: Only process entries that are newer than program start time
+                    if timestamp < self.program_start_time_iso:
+                        continue
+                        
+                    if timestamp <= self.account_last_timestamp.get(username, ""):
+                        continue
+                    
                     line_upper = line.upper()
 
+                    # Skip debug/warning/error lines unless they contain biome-related text
                     if ("[WARNING]" in line_upper or "[ERROR]" in line_upper or "[DEBUG]" in line_upper or 
                         "WARNING:" in line_upper or "ERROR:" in line_upper or "DEBUG:" in line_upper) and not any(
                         pattern in line_upper for pattern in [
                             "BIOME:", "BIOME ", "ENTERED ", "CURRENT BIOME", "BIOME CHANGED", "BIOME TYPE", "ENVIRONMENT:"
                         ]):
                         continue
-                    lines_to_check.append(line)
-
-                if lines_to_check:
-                    content_to_check = "\n".join(lines_to_check)
-                    content_upper = content_to_check.upper()
-
+                    
+                    # Check each biome against this line
                     for biome in self.biome_data:
                         biome_upper = biome.upper()
-
-                        if any(pattern in content_upper for pattern in [
-                            f"BIOME: {biome_upper}",
-                            f"BIOME {biome_upper}",
-                            f"ENTERED {biome_upper}",
-                            f"BIOME:{biome_upper}",
-                            f"CURRENT BIOME: {biome_upper}",
-                            f"CURRENT BIOME {biome_upper}",
-                            f"BIOME CHANGED TO {biome_upper}",
-                            f"BIOME CHANGED: {biome_upper}",
-                            f"BIOME TYPE: {biome_upper}",
-                            f"ENVIRONMENT: {biome_upper}",
-                            f"ENVIRONMENT {biome_upper}"
+                        
+                        # Check specific patterns that indicate a biome change
+                        if any([
+                            f"BIOME: {biome_upper}" in line_upper,
+                            f"BIOME {biome_upper}" in line_upper,
+                            f"ENTERED {biome_upper}" in line_upper,
+                            f"BIOME:{biome_upper}" in line_upper,
+                            f"CURRENT BIOME: {biome_upper}" in line_upper,
+                            f"CURRENT BIOME {biome_upper}" in line_upper,
+                            f"BIOME CHANGED TO {biome_upper}" in line_upper,
+                            f"BIOME CHANGED: {biome_upper}" in line_upper,
+                            f"BIOME TYPE: {biome_upper}" in line_upper,
+                            f"BIOME TYPE {biome_upper}" in line_upper,
+                            f"ENVIRONMENT: {biome_upper}" in line_upper,
+                            f"ENVIRONMENT {biome_upper}" in line_upper
                         ]):
-                            self.append_log(f"🌍 BIOME DETECTED via text: Found biome '{biome}' for {username}")
+                            # Log the matching line for debugging
+                            self.append_log(f"🌍 BIOME DETECTED via pattern: Found biome '{biome}' for {username} at {timestamp}")
+                            # self.append_log(f"Line content: {line}")
+                            
+                            # Call the handler method - it will check if the biome is different from current one
                             self.handle_account_biome_detection(username, biome)
-                            break
+                            
+                            # Update the last processed timestamp
+                            self.account_last_timestamp[username] = timestamp
+                            break  # Found a match for this biome, exit biome loop
 
         except Exception as e:
             error_msg = f"Error in check_account_biome_in_logs for user: {username} - {str(e)}"
@@ -3133,10 +3373,20 @@ class BiomePresence():
             return
 
         try:
-
+            # Ensure account tracking structures exist
+            if not hasattr(self, 'account_biomes'):
+                self.account_biomes = {}
+            
+            if not hasattr(self, 'account_last_sent'):
+                self.account_last_sent = {}
+                
+            if not hasattr(self, 'account_last_biome_change_time'):
+                self.account_last_biome_change_time = {}
+                
             username_lower = username.lower()
+            
+            # Add to active accounts
             if hasattr(self, 'active_accounts') and username_lower not in self.active_accounts:
-
                 account_exists = False
                 for account in self.accounts:
                     if account.get("username", "").lower() == username_lower:
@@ -3158,18 +3408,7 @@ class BiomePresence():
                     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {skip_message}")
                     return
 
-            if not hasattr(self, 'accounts') or not self.accounts:
-                self.accounts = self.config.get("accounts", [])
-                load_message = f"Loading accounts in biome_detect_thread: {len(self.accounts)} accounts found"
-                self.append_log(load_message)
-                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {load_message}")
-
-            is_special_biome = biome in ["GLITCHED", "DREAMSPACE"]
-            if is_special_biome or self.config.get("debug_mode", False):
-                processing_message = f"Processing biome detection for {username}: {biome}"
-                self.append_log(processing_message)
-                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {processing_message}")
-
+            # Initialize account tracking if needed
             if username not in self.account_biomes:
                 self.account_biomes[username] = None
                 init_message = f"Initialized account_biomes for {username}"
@@ -3181,94 +3420,90 @@ class BiomePresence():
                 init_sent_message = f"Initialized account_last_sent for {username}"
                 self.append_log(init_sent_message)
                 print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {init_sent_message}")
+                
+            if username not in self.account_last_biome_change_time:
+                self.account_last_biome_change_time[username] = 0
 
             current_biome = self.account_biomes.get(username)
             previous_biome = current_biome
 
-            if biome != current_biome:
+            # If biome is the same as current, no need to continue
+            if biome == current_biome:
+                return
 
-                now = datetime.now()
-                last_sent_time = self.account_last_sent[username].get(biome, datetime.min)
-                time_since_last_sent = (now - last_sent_time).total_seconds()
+            # Update the last biome change time
+            current_time = time.time()
+            self.account_last_biome_change_time[username] = current_time
+                
+            biome_change_message = f"Biome change detected for {username}: {current_biome or 'None'} -> {biome}"
+            self.append_log(biome_change_message)
+            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {biome_change_message}")
 
-                cooldown_time = 15 if is_special_biome else 5  
+            if biome in self.biome_data:
+                self.biome_counts[biome] = self.biome_counts.get(biome, 0) + 1
 
-                if time_since_last_sent < cooldown_time:
-                    if is_special_biome or self.config.get("debug_mode", False):
-                        cooldown_message = f"Ignoring biome detection for {username}: {biome} (cooldown period: {cooldown_time - time_since_last_sent:.1f}s remaining)"
-                        self.append_log(cooldown_message)
-                        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {cooldown_message}")
-                    return
+                if self.biome_counts[biome] % 5 == 0:  
+                    self.config["biome_counts"] = self.biome_counts
+                    self.save_config()
+                    count_message = f"Updated biome count for {biome}: {self.biome_counts[biome]}"
+                    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {count_message}")
 
-                biome_change_message = f"Biome change detected for {username}: {current_biome or 'None'} -> {biome}"
-                self.append_log(biome_change_message)
-                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {biome_change_message}")
+            # Update biome and record the time
+            self.account_biomes[username] = biome
+            now = datetime.now()
+            self.account_last_sent[username][biome] = now
 
-                if biome in self.biome_data:
-                    self.biome_counts[biome] = self.biome_counts.get(biome, 0) + 1
+            message_type = self.config.get("biome_notifier", {}).get(biome, "None")
 
-                    if self.biome_counts[biome] % 5 == 0:  
-                        self.config["biome_counts"] = self.biome_counts
-                        self.save_config()
-                        count_message = f"Updated biome count for {biome}: {self.biome_counts[biome]}"
-                        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {count_message}")
-
-                self.account_biomes[username] = biome
-                self.account_last_sent[username][biome] = now
-
-                message_type = self.config.get("biome_notifier", {}).get(biome, "None")
-
-                notification_enabled = True
-                if "biome_notification_enabled" in self.config:
-                    if biome in ["GLITCHED", "DREAMSPACE"]:
-                        notification_enabled = True
-                    else:
-                        notification_enabled = self.config["biome_notification_enabled"].get(biome, True)
-
+            notification_enabled = True
+            if "biome_notification_enabled" in self.config:
                 if biome in ["GLITCHED", "DREAMSPACE"]:
-                    message_type = "Ping"
+                    notification_enabled = True
+                else:
+                    notification_enabled = self.config["biome_notification_enabled"].get(biome, True)
 
-                webhook_tasks = []
+            if biome in ["GLITCHED", "DREAMSPACE"]:
+                message_type = "Ping"
 
-                if previous_biome and previous_biome in self.biome_data:
-                    prev_message_type = self.config.get("biome_notifier", {}).get(previous_biome, "None")
-                    prev_notification_enabled = True
+            webhook_tasks = []
 
-                    if "biome_notification_enabled" in self.config:
-                        if previous_biome not in ["GLITCHED", "DREAMSPACE"]:
-                            prev_notification_enabled = self.config["biome_notification_enabled"].get(previous_biome, True)
+            if previous_biome and previous_biome in self.biome_data:
+                prev_message_type = self.config.get("biome_notifier", {}).get(previous_biome, "None")
+                prev_notification_enabled = True
 
-                    if prev_message_type != "None" and prev_notification_enabled:
-                        end_webhook_message = f"Sending end webhook for {username}'s previous biome: {previous_biome}"
-                        self.append_log(end_webhook_message)
-                        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {end_webhook_message}")
-                        webhook_tasks.append(("end", previous_biome, prev_message_type))
+                if "biome_notification_enabled" in self.config:
+                    if previous_biome not in ["GLITCHED", "DREAMSPACE"]:
+                        prev_notification_enabled = self.config["biome_notification_enabled"].get(previous_biome, True)
 
-                if message_type != "None" and notification_enabled:
-                    start_webhook_message = f"Sending start webhook for {username}'s biome: {biome}"
-                    self.append_log(start_webhook_message)
-                    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {start_webhook_message}")
-                    webhook_tasks.append(("start", biome, message_type))
-                elif biome != "NORMAL" and biome in ["GLITCHED", "DREAMSPACE"]:
-                    special_webhook_message = f"Sending special webhook for {username}'s biome: {biome}"
-                    self.append_log(special_webhook_message)
-                    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {special_webhook_message}")
-                    webhook_tasks.append(("start", biome, "Ping"))
+                if prev_message_type != "None" and prev_notification_enabled:
+                    end_webhook_message = f"Sending end webhook for {username}'s previous biome: {previous_biome}"
+                    self.append_log(end_webhook_message)
+                    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {end_webhook_message}")
+                    webhook_tasks.append(("end", previous_biome, prev_message_type))
 
-                for event_type, biome_name, msg_type in webhook_tasks:
-                    self.send_account_webhook(username, biome_name, msg_type, event_type)
+            if message_type != "None" and notification_enabled:
+                start_webhook_message = f"Sending start webhook for {username}'s biome: {biome}"
+                self.append_log(start_webhook_message)
+                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {start_webhook_message}")
+                webhook_tasks.append(("start", biome, message_type))
+            elif biome != "NORMAL" and biome in ["GLITCHED", "DREAMSPACE"]:
+                special_webhook_message = f"Sending special webhook for {username}'s biome: {biome}"
+                self.append_log(special_webhook_message)
+                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {special_webhook_message}")
+                webhook_tasks.append(("start", biome, "Ping"))
 
-                if biome in ["GLITCHED"] and self.config.get("auto_pop_glitched", False):
-                    auto_pop_message = f"Auto-popping buffs for {username}'s glitched biome"
-                    self.append_log(auto_pop_message)
-                    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {auto_pop_message}")
+            for event_type, biome_name, msg_type in webhook_tasks:
+                self.send_account_webhook(username, biome_name, msg_type, event_type)
+
+            if biome in ["GLITCHED"] and self.config.get("auto_pop_glitched", False):
+                auto_pop_message = f"Auto-popping buffs for {username}'s glitched biome"
+                self.append_log(auto_pop_message)
+                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {auto_pop_message}")
 
         except Exception as e:
-            error_msg = f"Error in handle_account_biome_detection for {username}: {str(e)}"
+            error_msg = f"Error in handle_account_biome_detection for {username}, biome: {biome} - {str(e)}"
             self.append_log(error_msg)
             self.error_logging(e, error_msg)
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {error_msg}")
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Traceback: {traceback.format_exc()}")
 
     def open_accounts_manager(self):
         """Open the accounts manager window to add/edit/remove accounts"""
@@ -3424,7 +3659,7 @@ class BiomePresence():
         icon_url = "https://i.postimg.cc/mDzwFfX1/GLITCHED.png"
 
         title = f"📊 Status Update"
-        description = f"## {timestamp} {status}\n"
+        description = f"## {timestamp} {status}\nSupport Server: https://discord.gg/6cuCu6ymkX"
 
         webhook_success = False
         for webhook in webhooks:
@@ -3437,26 +3672,19 @@ class BiomePresence():
 
                 if "Started" in status:
                     session_time = "Just started"
-
-                    if not hasattr(self, 'start_time') or self.start_time is None:
-                        self.start_time = datetime.now()
-                        self.append_log(f"Session timer initialized in webhook at {self.start_time.strftime('%H:%M:%S')}")
-                    custom_description += f"**Session Duration:** {session_time}"
+                    custom_description += f"\n**Session Duration:** {session_time}"
                 elif "Stopped" in status:
                     session_time = self.get_total_session_time()
-                    custom_description += f"**Session Duration:** {session_time}"
+                    custom_description += f"\n**Session Duration:** {session_time}"
                 else:
-
                     session_time = self.get_total_session_time()
-                    custom_description += f"**Session Duration:** {session_time}"
+                    custom_description += f"\n**Session Duration:** {session_time}"
 
                 account_notifications = webhook.get("account_notifications", [])
 
                 if account_notifications:
-
                     filtered_accounts = []
                     for account_name in account_notifications:
-
                         for account in self.accounts:
                             if account.get("username", "").lower() == account_name.lower():
                                 filtered_accounts.append(account)
@@ -3470,7 +3698,6 @@ class BiomePresence():
                             status_icon = "✅" if is_active else "❌"
                             custom_description += f"- {username} {status_icon}\n"
                 elif self.accounts:
-
                     custom_description += "\n### Tracked Accounts:\n"
                     for account in self.accounts:
                         username = account.get("username", "Unknown")
@@ -3713,122 +3940,195 @@ class BiomePresence():
         return self.config.get("private_server_link", "")
 
     def start_detection(self):
-        """Start the biome detection thread"""
+        """Start the biome detection process"""
         try:
-            if hasattr(self, 'detection_running') and self.detection_running:
-                self.append_log("Biome detection is already running.")
-                return False
+            if self.detection_running:
+                self.append_log("⚠️ Detection already running!")
+                return
 
-            if not hasattr(self, 'detection_thread'):
-                self.detection_thread = None
-
-            self.append_log("Starting biome detection...")
             self.detection_running = True
-
+            self.stop_event = threading.Event()
+            
+            # Initialize start_time for session tracking
             self.start_time = datetime.now()
             self.append_log(f"Session timer started at {self.start_time.strftime('%H:%M:%S')}")
-
-            self.root.title(f"BiomeScope | Version {self.version} (Running)")
-
-            if self.detection_thread is None or not self.detection_thread.is_alive():
-                self.account_biomes = {}
-                self.account_last_positions = {}
-                self.account_last_sent = {}
-                if hasattr(self, 'player_added_verified_logs'):
-                    self.player_added_verified_logs = set()
-
-                self.accounts = self.config.get("accounts", [])
-
-                if not hasattr(self, 'active_accounts'):
-                    self.active_accounts = set()
-                else:
-                    self.active_accounts.clear()
-
-                active_account_count = 0
+            
+            self.append_log("🚀 Starting biome detection")
+            
+            # Reset timestamp to current time when starting detection
+            self.startup_timestamp = time.time()
+            self.last_directory_scan = 0
+            self.append_log(f"Set startup timestamp to {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(self.startup_timestamp))}")
+            
+            # Set program start time in ISO format for timestamp filtering
+            self.program_start_time_iso = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+            self.append_log(f"Set program start time for timestamp filtering: {self.program_start_time_iso}")
+            
+            # Initialize timestamp tracking for all accounts to current time
+            if not hasattr(self, 'account_last_timestamp'):
+                self.account_last_timestamp = {}
+                
+            # Initialize all accounts with program start time
+            if hasattr(self, 'accounts') and self.accounts:
                 for account in self.accounts:
-                    username = account.get("username", "Unknown")
-                    ps_link = account.get("ps_link", "No PS Link")
-                    is_active = account.get("active", True)
+                    if account.get("active", True) and account.get("username"):
+                        username = account.get("username")
+                        self.account_last_timestamp[username] = self.program_start_time_iso
+                        self.append_log(f"Reset timestamp for {username} to program start time")
+            
+            # Start session timer update
+            threading.Thread(target=self._update_session_timer_thread, daemon=True).start()
+            
+            # Reset any detection state
+            self.current_biome = None
+            self.last_sent = {biome: datetime.min for biome in self.biome_data}
+            
+            if hasattr(self, 'account_biomes'):
+                for username in self.account_biomes:
+                    self.account_biomes[username] = None
+            
+            # Start the detection threads
+            self.biome_thread = threading.Thread(target=self._biome_detection_thread, daemon=True)
+            self.biome_thread.start()
+            
+            # Send webhook status
+            self.send_webhook_status("BiomeScope Started", 0x00FF00)
+            
+            # Update the UI
+            if hasattr(self, 'start_detection_btn') and self.start_detection_btn.winfo_exists():
+                self.start_detection_btn.configure(state="disabled")
+                
+            if hasattr(self, 'stop_detection_btn') and self.stop_detection_btn.winfo_exists():
+                self.stop_detection_btn.configure(state="normal")
+                
+            if hasattr(self, 'status_label'):
+                self.status_label.configure(text="Status: Running", foreground="green")
+                
+            # Update window title
+            if hasattr(self, 'root') and self.root.winfo_exists():
+                self.root.title(f"BiomeScope | Version {self.version} (Running)")
 
-                    if is_active:
-                        self.active_accounts.add(username.lower())
-                        active_account_count += 1
-
-                self.append_log(f"Loaded {len(self.accounts)} accounts, {active_account_count} active")
-                for i, account in enumerate(self.accounts, 1):
-                    username = account.get("username", "Unknown")
-                    ps_link = account.get("ps_link", "No PS Link")
-                    is_active = account.get("active", True)
-                    status = "Active" if is_active else "Inactive"
-                    self.append_log(f"Account {i}: {username}, PS Link: {ps_link}, Status: {status}")
-
-                self.append_log("🔍 INITIAL SCAN: Searching for active log files and player information...")
-                all_log_files = self.get_log_files(silent=True)
-
-                current_time = time.time()
-                active_logs = []
-                for log_file in all_log_files:
-                    try:
-                        if current_time - os.path.getmtime(log_file) < 300:  
-                            active_logs.append(log_file)
-                    except Exception:
-                        continue
-
-                self.append_log(f"Found {len(active_logs)} active log files out of {len(all_log_files)} total logs")
-                if active_logs:
-                    self.scan_for_player_added_messages()
-
-                if len(self.accounts) > 0:
-                    self.append_log("Multi-account biome detection thread started")
-                    self.detection_thread = threading.Thread(target=self.multi_account_biome_loop, daemon=True)
-                else:
-                    self.append_log("Single-account biome detection thread started")
-                    self.detection_thread = threading.Thread(target=self.detection_loop, daemon=True)
-
-                self.detection_thread.start()
-
-                self.send_webhook_status("Biome Detection Started", 0x00FF00)
-
-                return True
-            else:
-                self.append_log("Detection thread already exists and is running.")
-                return False
         except Exception as e:
-            error_msg = f"Error starting biome detection: {str(e)}: {traceback.format_exc()}"
+            self.detection_running = False
+            error_msg = f"Error starting detection: {str(e)}"
+            self.append_log(error_msg)
+            self.error_logging(e, error_msg)
+            
+            # Make sure UI is in correct state
+            if hasattr(self, 'start_detection_btn') and self.start_detection_btn.winfo_exists():
+                self.start_detection_btn.configure(state="normal")
+                
+            if hasattr(self, 'stop_detection_btn') and self.stop_detection_btn.winfo_exists():
+                self.stop_detection_btn.configure(state="disabled")
+
+    def _biome_detection_thread(self):
+        """Background thread for biome detection"""
+        try:
+            self.append_log("Starting biome detection thread")
+            
+            # Get initial log files
+            log_files = self.get_log_files_since_startup()
+            if log_files:
+                self.append_log(f"Found {len(log_files)} log files at startup")
+            
+            while not self.stop_event.is_set():
+                try:
+                    # Use existing methods to check all accounts
+                    if self.accounts and len(self.accounts) > 0:
+                        self.check_all_accounts_biomes_at_once()
+                    else:
+                        # Single account mode - just check latest log file
+                        log_file_path = self.get_latest_log_file()
+                        if log_file_path:
+                            self.check_biome_in_logs(log_file_path)
+                    
+                    # Always sleep to prevent CPU overuse
+                    time.sleep(1)
+                except Exception as e:
+                    error_msg = f"Error in biome detection cycle: {str(e)}"
+                    self.append_log(error_msg)
+                    self.error_logging(e, error_msg)
+                    time.sleep(5)  # Longer sleep after error
+            
+            self.append_log("Biome detection thread stopped")
+        
+        except Exception as e:
+            error_msg = f"Fatal error in biome detection thread: {str(e)}"
+            self.append_log(error_msg)
+            self.error_logging(e, error_msg)
+        
+        finally:
+            # Just mark as not running - UI updates are handled in stop_detection
+            self.detection_running = False
+            # No UI updates here - those are handled in stop_detection
+
+    def _update_session_timer_thread(self):
+        """Background thread to update session timer"""
+        try:
+            while self.detection_running and not self.stop_event.is_set():
+                try:
+                    self.update_session_timer()
+                    time.sleep(1)
+                except Exception:
+                    time.sleep(1)
+        except Exception:
+            pass
+
+    def stop_detection(self):
+        """Stop the biome detection process"""
+        try:
+            if not self.detection_running:
+                self.append_log("⚠️ Detection is not running!")
+                return
+            
+            self.append_log("🛑 Stopping biome detection")
+            
+            # Signal threads to stop
+            self.stop_event.set()
+            
+            # Wait for biome thread to finish (with timeout)
+            if hasattr(self, 'biome_thread') and self.biome_thread.is_alive():
+                self.biome_thread.join(timeout=2.0)
+            
+            # Send webhook status
+            self.send_webhook_status("BiomeScope Stopped", 0xFF0000)
+            
+            # Save current session data
+            self.save_logs()
+            self.save_config()
+            
+            # Reset detection status
+            self.detection_running = False
+            
+            # Update the UI
+            if hasattr(self, 'start_detection_btn') and self.start_detection_btn.winfo_exists():
+                self.start_detection_btn.configure(state="normal")
+                
+            if hasattr(self, 'stop_detection_btn') and self.stop_detection_btn.winfo_exists():
+                self.stop_detection_btn.configure(state="disabled")
+                
+            if hasattr(self, 'status_label'):
+                self.status_label.configure(text="Status: Stopped", foreground="red")
+                
+            # Update window title
+            if hasattr(self, 'root') and self.root.winfo_exists():
+                self.root.title(f"BiomeScope | Version {self.version}")
+            
+            # Calculate session duration - check if start_time exists
+            if hasattr(self, 'start_time') and self.start_time is not None:
+                session_duration = datetime.now() - self.start_time
+                hours, remainder = divmod(session_duration.seconds, 3600)
+                minutes, seconds = divmod(remainder, 60)
+                self.append_log(f"Session ended. Duration: {hours:02}:{minutes:02}:{seconds:02}")
+                self.start_time = None  # Reset start_time
+            
+            self.append_log("Biome detection stopped")
+            
+        except Exception as e:
+            error_msg = f"Error stopping detection: {str(e)}"
             self.append_log(error_msg)
             self.error_logging(e, error_msg)
             self.detection_running = False
-
-            self.root.title(f"BiomeScope | Version {self.version}")
-            return False
-
-    def stop_detection(self):
-        """Stop the biome detection process - simplified version"""
-        if not hasattr(self, 'detection_running') or not self.detection_running:
-            self.append_log("Detection is not running")
-            return
-
-        self.detection_running = False
-        self.append_log("Stopping biome detection...")
-
-        if hasattr(self, 'start_time') and self.start_time:
-            elapsed_time = int((datetime.now() - self.start_time).total_seconds())
-            self.saved_session = elapsed_time  
-            self.start_time = None
-
-        self.save_config()
-
-        self.root.title(f"BiomeScope | Version {self.version} (Stopped)")
-
-        self.send_webhook_status("Biome Detection Stopped", 0xFF0000)  
-
-        self.saved_session = 0
-
-        self.current_biome = None
-        self.account_biomes = {}
-
-        self.append_log("Biome detection stopped successfully")
-        print("Biome detection stopped.")
 
     def get_log_file_for_user(self, username):
         """Get the log file for a specific user"""
@@ -4375,6 +4675,10 @@ class BiomePresence():
             if message_hash in self.rpc_message_cache:
                 return self.rpc_message_cache[message_hash]
 
+            # For tracking if we found a biome in debug mode
+            found_biome = None
+            match_source = None
+
             if "largeImage" in rpc_message:
                 large_image_part = rpc_message[rpc_message.find("largeImage")+10:]
                 comma_pos = large_image_part.find(",")
@@ -4382,6 +4686,8 @@ class BiomePresence():
                     biome_name = large_image_part[:comma_pos].strip('"\'{}:')
                     for biome in self.biome_data:
                         if biome.upper() == biome_name.upper():
+                            found_biome = biome
+                            match_source = "largeImage exact match"
 
                             self.rpc_message_cache[message_hash] = biome
 
@@ -4395,11 +4701,13 @@ class BiomePresence():
 
                     for biome in self.biome_data:
                         if biome.upper() in biome_name.upper():
+                            found_biome = biome
+                            match_source = "largeImage partial match"
 
                             self.rpc_message_cache[message_hash] = biome
                             return biome
 
-            if "details" in rpc_message:
+            if "details" in rpc_message and not found_biome:
                 details_part = rpc_message[rpc_message.find("details")+7:]
                 colon_pos = details_part.find(":")
                 if colon_pos > 0:
@@ -4412,15 +4720,19 @@ class BiomePresence():
 
                     for biome in self.biome_data:
                         if biome.upper() == details_value.upper():
+                            found_biome = biome
+                            match_source = "details exact match"
                             self.rpc_message_cache[message_hash] = biome
                             return biome
 
                     for biome in self.biome_data:
                         if biome.upper() in details_value.upper():
+                            found_biome = biome
+                            match_source = "details partial match"
                             self.rpc_message_cache[message_hash] = biome
                             return biome
 
-            if "state" in rpc_message:
+            if "state" in rpc_message and not found_biome:
                 state_part = rpc_message[rpc_message.find("state")+5:]
                 colon_pos = state_part.find(":")
                 if colon_pos > 0:
@@ -4433,23 +4745,29 @@ class BiomePresence():
 
                     for biome in self.biome_data:
                         if biome.upper() == state_value.upper():
+                            found_biome = biome
+                            match_source = "state exact match"
                             self.rpc_message_cache[message_hash] = biome
                             return biome
 
                     for biome in self.biome_data:
                         if biome.upper() in state_value.upper():
+                            found_biome = biome
+                            match_source = "state partial match"
                             self.rpc_message_cache[message_hash] = biome
                             return biome
 
-            rpc_upper = rpc_message.upper()
-            for biome in self.biome_data:
-                biome_upper = biome.upper()
-                if biome_upper in rpc_upper:
-
-                    pattern = f"[\"' ,]({biome_upper})[\"' ,:]"
-                    if re.search(pattern, rpc_upper):
-                        self.rpc_message_cache[message_hash] = biome
-                        return biome
+            if not found_biome:
+                rpc_upper = rpc_message.upper()
+                for biome in self.biome_data:
+                    biome_upper = biome.upper()
+                    if biome_upper in rpc_upper:
+                        pattern = f"[\"' ,]({biome_upper})[\"' ,:]"
+                        if re.search(pattern, rpc_upper):
+                            found_biome = biome
+                            match_source = "full message match"
+                            self.rpc_message_cache[message_hash] = biome
+                            return biome
 
             self.rpc_message_cache[message_hash] = None
 

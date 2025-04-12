@@ -2,7 +2,7 @@
 
 A hard-fork of Noteab's Noteab Macro.
 
-**Current Version: 1.0.5-Testing**
+**Current Version: 1.0.5-Testing2**
 
 ## 🌟 Features
 
@@ -59,7 +59,7 @@ This project is licensed under the GNU Affero GPL v3.0 License - see the [LICENS
 - **cresqnt_** - Developer of BiomeScope
 - **Noteab** - Original project creator
 - **Maxstellar** - Inspiration for Biome Detection ([YouTube Channel](https://www.youtube.com/@maxstellar_))
-- **Bored Man** - Idea of Multi-Account Biome Detection
+- **Bored Man** - Inspiration for Multi-Account Biome Detection
 
 ## 📞 Support
 

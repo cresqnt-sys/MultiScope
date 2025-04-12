@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.5-Testing2] - 2025-04-10
+
+### Added
+- Added Discord server link to webhooks and UI
+- Added clickable links in Credits tab for Discord and GitHub
+- Added strict timestamp filtering to prevent processing of old log entries
+- Added improved debug information for biome detection
+
+### Fixed
+- Fixed issue with processing historical log entries on startup
+- Fixed timestamp handling in biome detection system
+- Fixed webhook links and UI elements in Credits tab
+
+### Changed
+- Updated Discord server information from "Soon" to actual server link
+- Updated GitHub repository links
+- Improved RPC message processing with better debug tracking
+- Enhanced timestamp validation for log processing
+
 ## [1.0.5-Testing] - 2025-04-08
 
 ### Changed
