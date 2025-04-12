@@ -4531,12 +4531,27 @@ class BiomePresence():
             log_files = []
 
             try:
+                # Debug: List all files in the directory
+                if not silent:
+                    all_files = [f for f in os.listdir(self.logs_dir) if f.endswith('.log')]
+                    self.append_log(f"DEBUG: All log files in directory: {', '.join(all_files)}")
+                
                 for filename in os.listdir(self.logs_dir):
                     if not filename.endswith('.log'):
                         continue
 
                     is_player_log = "player" in filename.lower()
+                    
+                    # More flexible pattern matching for newer Roblox log files
+                    if not is_player_log and "_Player_" in filename:
+                        is_player_log = True
+                        self.append_log(f"DEBUG: Detected alternate Player log format: {filename}")
+                        
                     is_last_log = "last" in filename.lower() 
+                    
+                    # Debug: Show details about each log file
+                    if not silent:
+                        self.append_log(f"DEBUG: Checking file {filename}: is_player_log={is_player_log}, is_last_log={is_last_log}")
 
                     if is_player_log:
                         full_path = os.path.join(self.logs_dir, filename)
