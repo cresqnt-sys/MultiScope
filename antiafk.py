@@ -218,16 +218,16 @@ class AntiAFK:
         return frame
 
     def show_first_launch_instructions(self):
-        """Show first launch instructions for all BiomeScope features"""
+        """Show first launch instructions for all MultiScope features"""
         instructions = (
-            "BiomeScope - First Launch Instructions - PLEASE READ THIS\n"
+            "MultiScope - First Launch Instructions - PLEASE READ THIS\n"
             "--------------------------------------\n"
             "IMPORTANT SETUP:\n"
-            "1. Always open BiomeScope BEFORE launching Roblox (!!! NOT START!!!)\n"
-            "2. BiomeScope will automatically configure feature flags for optimal detection\n"
+            "1. Always open MultiScope BEFORE launching Roblox (!!! NOT START!!!)\n"
+            "2. MultiScope will automatically configure feature flags for optimal detection\n"
             "3. These settings enhance your experience by enabling detailed logging\n"
             "\nBIOME DETECTION:\n"
-            "- BiomeScope automatically detects biomes in Sols and sends Discord notifications\n"
+            "- MultiScope automatically detects biomes in Sols and sends Discord notifications\n"
             "- Press F1 to start detection and F2 to stop\n"
             "- Configure which biomes to be notified about in the Biome Settings\n"
             "- Multi-account support allows monitoring all your accounts simultaneously\n"
@@ -245,7 +245,7 @@ class AntiAFK:
             "  • Use 'Show/Hide Roblox' buttons to manage window visibility\n"
             "  • The 'Test' button lets you verify the anti-AFK action works\n"
             "\nFEATURE FLAGS (AUTOMATIC):\n"
-            "- BiomeScope automatically sets these feature flags for all Roblox installations:\n"
+            "- MultiScope automatically sets these feature flags for all Roblox installations:\n"
             "  • FStringDebugLuaLogLevel: trace\n"
             "  • FStringDebugLuaLogPattern: ExpChat/mountClientApp\n"
             "- These settings are required for optimal biome detection\n"
@@ -259,7 +259,7 @@ class AntiAFK:
         )
 
         popup = tk.Toplevel()
-        popup.title("BiomeScope - First Launch Instructions")
+        popup.title("MultiScope - First Launch Instructions")
         popup.geometry("700x600")
         popup.grab_set()  
 
