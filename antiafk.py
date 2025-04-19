@@ -72,15 +72,6 @@ class AntiAFK:
         controls_frame = ttk.Frame(info_frame)
         controls_frame.pack(fill=tk.X, padx=10, pady=5)
 
-        self.antiafk_enabled_var = tk.BooleanVar(value=self.config.get("antiafk_enabled", False))
-        self.antiafk_enabled_cb = ttk.Checkbutton(
-            controls_frame, 
-            text="Enable Anti-AFK", 
-            variable=self.antiafk_enabled_var,
-            command=self.toggle_antiafk
-        )
-        self.antiafk_enabled_cb.grid(row=0, column=0, sticky="w", padx=5, pady=5)
-
         self.multi_instance_var = tk.BooleanVar(value=True)
 
         ttk.Label(controls_frame, text="Action Interval (seconds):").grid(row=1, column=0, sticky="w", padx=5, pady=5)
@@ -212,7 +203,7 @@ class AntiAFK:
         if hasattr(self.parent, 'config') and not self.parent.config.get('tutorial_shown', False):
             if hasattr(self.parent, 'config'):
                 self.parent.config['tutorial_shown'] = True
-                self.parent.save_config()
+                self.parent.config_changed = True
             self.show_first_launch_instructions()
 
         return frame
@@ -291,8 +282,6 @@ class AntiAFK:
     def update_config(self):
         """Update configuration based on current UI settings"""
         try:
-
-            self.config['antiafk_enabled'] = self.antiafk_enabled_var.get()
             self.config['multi_instance_enabled'] = self.multi_instance_var.get()
             self.config['antiafk_interval'] = int(self.interval_var.get())
             self.config['antiafk_action'] = self.action_type_var.get()
@@ -318,7 +307,7 @@ class AntiAFK:
                 for key, value in self.config.items():
                     self.parent.config[key] = value
 
-            self.parent.save_config()
+            self.parent.config_changed = True
 
             self.update_button_states()
 
@@ -339,8 +328,7 @@ class AntiAFK:
 
     def update_button_states(self):
         """Update the state of control buttons based on current status"""
-
-        antiafk_enabled = self.antiafk_enabled_var.get()
+        antiafk_enabled = self.antiafk_running
 
         self.start_btn.config(state="disabled" if antiafk_enabled else "normal")
         self.stop_btn.config(state="normal" if antiafk_enabled else "disabled")
@@ -366,25 +354,21 @@ class AntiAFK:
             if hasattr(self.parent, 'append_log'):
                 self.parent.append_log(f"[Anti-AFK] {message}")
         except (tk.TclError, RuntimeError, AttributeError):
-
             pass
 
     def toggle_antiafk(self, enable=None):
         """Toggle the Anti-AFK functionality on or off"""
         if enable is None:
-            enable = self.antiafk_enabled_var.get()
-        else:
-            self.antiafk_enabled_var.set(enable)
+            self.log_error(ValueError("toggle_antiafk called without explicit enable state"))
+            return
 
         self.config['antiafk_enabled'] = enable
-        self.parent.save_config()
+        self.parent.save_state()
 
         if enable:
-
             if not self.antiafk_running:
                 self.start_antiafk()
         else:
-
             if self.antiafk_running:
                 self.stop_antiafk()
 
@@ -394,7 +378,7 @@ class AntiAFK:
         """Toggle multi-instance support"""
         enabled = self.multi_instance_var.get()
         self.config['multi_instance_enabled'] = enabled
-        self.parent.save_config()
+        self.parent.save_state()
 
         if enabled:
             self.enable_multi_instance()
@@ -406,7 +390,6 @@ class AntiAFK:
     def enable_multi_instance(self):
         """Enable multi-instance support by creating a mutex"""
         try:
-
             if self.multi_instance_mutex:
                 return True
 
@@ -484,7 +467,6 @@ class AntiAFK:
 
         def enum_window_callback(hwnd, windows):
             try:
-
                 if include_hidden or win32gui.IsWindowVisible(hwnd):
                     _, process_id = win32process.GetWindowThreadProcessId(hwnd)
                     process = psutil.Process(process_id)

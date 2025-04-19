@@ -175,3 +175,4 @@ cython_debug/
 config.json
 file_version_info.txt
 error_logs.txt
+version.txt

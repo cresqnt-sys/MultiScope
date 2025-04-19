@@ -68,13 +68,13 @@ class MultiScopeApp:
                  error_logging(e, "Failed to initialize AntiAFK module")
                  self.has_antiafk = False 
 
-        self.detection_manager = DetectionManager(self)
-
         if gui_manager_class:
             self.gui_manager = gui_manager_class(self)
         else:
 
             raise ValueError("GuiManager class must be provided to MultiScopeApp")
+
+        self.detection_manager = DetectionManager(self)
 
         setup_locale()
         self._initialize_state()

@@ -1,5 +1,6 @@
 import sys
 import traceback
+import os
 
 import tkinter as tk
 import ttkbootstrap as ttk
@@ -8,7 +9,6 @@ from PIL import Image, ImageTk
 import webbrowser
 from datetime import datetime
 import ctypes 
-import os 
 
 from utils import create_tooltip, error_logging 
 
@@ -23,6 +23,17 @@ except AttributeError:
     print("Running on non-Windows OS or shell32 not available, cannot set AppUserModelID.")
 except Exception as e:
      print(f"Error setting AppUserModelID: {e}")
+
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+
+        base_path = sys._MEIPASS
+    except Exception:
+
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
 
 class GuiManager:
     def __init__(self, app_instance):
@@ -51,6 +62,17 @@ class GuiManager:
         selected_theme = self.app.config.get("selected_theme", "darkly")
         self.root = ttk.Window(themename=selected_theme)
 
+        try:
+            icon_path = resource_path('biomescope.ico')
+            if os.path.exists(icon_path):
+                self.root.iconbitmap(icon_path)
+            else:
+                 print(f"Error: Icon file not found at {icon_path}")
+        except tk.TclError:
+            print("Error: Could not load 'biomescope.ico' (TclError).")
+        except Exception as e:
+            print(f"An unexpected error occurred setting the icon: {e}")
+
         if self.app.myappid:
             try:
                  ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(self.app.myappid)
@@ -58,7 +80,7 @@ class GuiManager:
                  print(f"Failed to set AppUserModelID or icon: {e}")
 
         self.root.title(f"MultiScope | Version {self.app.version}")
-        self.root.geometry("735x500")
+        self.root.geometry("735x530")
         self.root.resizable(True, True)
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
@@ -354,7 +376,7 @@ class GuiManager:
         dc_label.pack(anchor="w", padx=10, pady=5); dc_label.bind("<Button-1>", lambda e: webbrowser.open("https://discord.gg/6cuCu6ymkX")); create_tooltip(dc_label, "Join Discord")
         gh_label = ttk.Label(support_frame, text="GitHub Repository: View Source", cursor="hand2", foreground="#007bff")
         gh_label.pack(anchor="w", padx=10, pady=5); gh_label.bind("<Button-1>", lambda e: webbrowser.open("https://github.com/cresqnt-sys/MultiScope")); create_tooltip(gh_label, "View Source")
-        ttk.Label(frame, text="© 2024-2025 cresqnt. All rights reserved.").pack(side="bottom", pady=20)
+        ttk.Label(frame, text="© 2025 cresqnt. All rights reserved.").pack(side="bottom", pady=(10, 5), anchor='s')
 
     def show_message_box(self, title, message, msg_type="info"):
         """Shows a standard message box."""
@@ -385,12 +407,25 @@ class GuiManager:
         bv = {}; cfg = self.app.config.get("biome_notification_enabled", {})
         for b in sorted(self.app.biome_data.keys()):
              f = ttk.Frame(cba); f.pack(fill='x', pady=2, padx=5)
-             aen = b in ["GLITCHED", "DREAMSPACE"]; iv = True if aen else cfg.get(b, True); var = tk.BooleanVar(value=iv)
-             cb = ttk.Checkbutton(f, text=b, variable=var, state="disabled" if aen else "normal"); cb.pack(side='left'); bv[b] = var
+             aen = b in ["GLITCHED", "DREAMSPACE"]
+             always_off = b == "NORMAL"
+             iv = True if aen else (False if always_off else cfg.get(b, True))
+             var = tk.BooleanVar(value=iv)
+             cb = ttk.Checkbutton(f, text=b, variable=var, state="disabled" if aen or always_off else "normal")
+             cb.pack(side='left')
+             bv[b] = var
              if aen: ttk.Label(f, text="(Always Notify)", foreground="green").pack(side='right', padx=5)
+             elif always_off: ttk.Label(f, text="(Never Notify)", foreground="red").pack(side='right', padx=5)
         bf = ttk.Frame(win, padding=(0, 10)); bf.pack(fill='x')
-        def svs(): ns = {b: v.get() for b, v in bv.items()}; ns["GLITCHED"]=ns["DREAMSPACE"]=True; self.app.config["biome_notification_enabled"]=ns; self.app.config_changed=True; win.destroy(); self.show_message_box("Success", "Settings saved!", "info")
-        def sa(): [v.set(True) for b, v in bv.items() if b not in ["GLITCHED", "DREAMSPACE"]]
+        def svs(): 
+            ns = {b: v.get() for b, v in bv.items()}
+            ns["GLITCHED"] = ns["DREAMSPACE"] = True
+            ns["NORMAL"] = False  
+            self.app.config["biome_notification_enabled"] = ns
+            self.app.config_changed = True
+            win.destroy()
+            self.show_message_box("Success", "Settings saved!", "info")
+        def sa(): [v.set(True) for b, v in bv.items() if b not in ["GLITCHED", "DREAMSPACE", "NORMAL"]]
         def sn(): [v.set(False) for b, v in bv.items() if b not in ["GLITCHED", "DREAMSPACE"]]
         ttk.Button(bf, text="Save", command=svs, style="success.TButton", width=10).pack(side='right', padx=5)
         ttk.Button(bf, text="Cancel", command=win.destroy, style="danger.TButton", width=10).pack(side='right', padx=5)
