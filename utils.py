@@ -139,18 +139,18 @@ def save_config(config_data):
     save_json_data(CONFIG_FILENAME, config_data)
 
 def load_biome_data():
-    """Loads biome data."""
+    """Loads biome data. (thanks maxstellar for the images)"""
     default_data = {
-        "WINDY": {"emoji": "🌀", "color": "0xFFFFFF", "thumbnail_url": ""}, 
-        "RAINY": {"emoji": "🌧️", "color": "0x55925F", "thumbnail_url": ""},
-        "SNOWY": {"emoji": "❄️", "color": "0xFFFFFF", "thumbnail_url": ""},
-        "SAND STORM": {"emoji": "🏜️", "color": "0xFFA500", "thumbnail_url": ""},
-        "HELL": {"emoji": "🔥", "color": "0xFB4F29", "thumbnail_url": ""},
-        "STARFALL": {"emoji": "🌠", "color": "0xFFFFFF", "thumbnail_url": ""},
-        "CORRUPTION": {"emoji": "🌑", "color": "0x800080", "thumbnail_url": ""},
-        "NULL": {"emoji": "🌫️", "color": "0x808080", "thumbnail_url": ""},
+        "WINDY": {"emoji": "🌀", "color": "0xFFFFFF", "thumbnail_url": "https://maxstellar.tech/biome_thumb/WINDY.png"}, 
+        "RAINY": {"emoji": "🌧️", "color": "0x55925F", "thumbnail_url": "https://maxstellar.tech/biome_thumb/RAINY.png"},
+        "SNOWY": {"emoji": "❄️", "color": "0xFFFFFF", "thumbnail_url": "https://maxstellar.tech/biome_thumb/SNOWY.png"},
+        "SAND STORM": {"emoji": "🏜️", "color": "0xFFA500", "thumbnail_url": "https://maxstellar.tech/biome_thumb/SAND%20STORM.png"},
+        "HELL": {"emoji": "🔥", "color": "0xFB4F29", "thumbnail_url": "https://maxstellar.tech/biome_thumb/HELL.png"},
+        "STARFALL": {"emoji": "🌠", "color": "0xFFFFFF", "thumbnail_url": "https://maxstellar.tech/biome_thumb/STARFALL.png"},
+        "CORRUPTION": {"emoji": "🌑", "color": "0x800080", "thumbnail_url": "https://maxstellar.tech/biome_thumb/CORRUPTION.png"},
+        "NULL": {"emoji": "🌫️", "color": "0x808080", "thumbnail_url": "https://maxstellar.tech/biome_thumb/NULL.png"},
         "GLITCHED": {"emoji": "⚠️", "color": "0xFFFF00", "thumbnail_url": "https://i.postimg.cc/mDzwFfX1/GLITCHED.png"},
-        "DREAMSPACE": {"emoji": "💤", "color": "0xFF00FF", "thumbnail_url": ""},
+        "DREAMSPACE": {"emoji": "💤", "color": "0xFF00FF", "thumbnail_url": "https://maxstellar.tech/biome_thumb/DREAMSPACE.png"},
         "NORMAL": {"emoji": "🌳", "color": "0x00FF00", "thumbnail_url": ""}
     }
 
@@ -164,7 +164,7 @@ def load_biome_data():
         elif not isinstance(info.get("color"), str) or not info["color"].startswith("0x"):
              info["color"] = "0xFFFFFF" 
     return data
-
+    
 def load_auras_json():
     """Loads auras data."""
     return load_json_data(AURAS_FILENAME, {}, [AURAS_FILENAME])
