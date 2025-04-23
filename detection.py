@@ -431,7 +431,7 @@ class DetectionManager:
     def test_webhook(self, webhook_url):
         """Sends a test message to the specified webhook URL."""
         if not webhook_url:
-            self.app.show_message_box("Error", "Webhook URL is empty.", "error")
+            self.app.gui_manager.show_message_box("Error", "Webhook URL is empty.", "error")
             return False
 
         test_embed = {
@@ -448,7 +448,7 @@ class DetectionManager:
                 timeout=10
             )
             response.raise_for_status()
-            self.app.show_message_box("Success", "Test message sent successfully!", "info")
+            self.app.gui_manager.show_message_box("Success", "Test message sent successfully!", "info")
             self.app.append_log(f"Test webhook successful for URL ending in ...{webhook_url[-10:]}")
             return True
         except requests.exceptions.RequestException as e:
@@ -458,10 +458,10 @@ class DetectionManager:
                  if response.status_code == 404: error_msg += "\n(Webhook URL not found)"
                  elif response.status_code == 401: error_msg += "\n(Unauthorized - Invalid URL?)"
                  elif response.status_code == 400: error_msg += "\n(Bad request - Embed format issue?)"
-            self.app.show_message_box("Error", error_msg, "error")
+            self.app.gui_manager.show_message_box("Error", error_msg, "error")
             error_logging(e, f"Failed to send test webhook to ...{webhook_url[-10:]}")
             return False
         except Exception as e:
              error_logging(e, f"Unexpected error testing webhook ...{webhook_url[-10:]}")
-             self.app.show_message_box("Error", f"An unexpected error occurred: {e}", "error")
+             self.app.gui_manager.show_message_box("Error", f"An unexpected error occurred: {e}", "error")
              return False

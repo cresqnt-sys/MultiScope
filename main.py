@@ -13,7 +13,7 @@ import ctypes
 from utils import create_tooltip, error_logging 
 
 APP_NAME = "MultiScope"
-APP_VERSION = "0.0.9-Alpha" 
+APP_VERSION = "0.9.5-Alpha" 
 MYAPPID = f"{APP_NAME}.App.{APP_VERSION}"
 try:
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(MYAPPID)
@@ -230,44 +230,93 @@ class GuiManager:
         all_accounts_check = ttk.Checkbutton(notify_frame, text="Notify for all configured accounts", variable=notify_all_var, command=lambda data=webhook_data: self._toggle_account_selection(data))
         all_accounts_check.pack(anchor='w')
 
-        account_list_frame = ttk.Frame(account_selection_frame); account_list_frame.pack(fill='both', expand=True, padx=8, pady=(5, 8))
-        account_listbox = tk.Listbox(account_list_frame, height=5, selectmode=tk.MULTIPLE, exportselection=False)
-        account_scrollbar = ttk.Scrollbar(account_list_frame, orient="vertical", command=account_listbox.yview)
-        account_listbox.config(yscrollcommand=account_scrollbar.set); account_listbox.pack(side="left", fill="both", expand=True); account_scrollbar.pack(side="right", fill="y")
-        webhook_data["listbox"] = account_listbox
-        self._populate_account_listbox(webhook_data)
-        account_listbox.bind("<<ListboxSelect>>", lambda e, data=webhook_data: self._update_selected_accounts(data))
+        account_selection_frame.pack(fill='x', pady=(0, 5), padx=8)
+
+        account_checklist_scroll_frame = ttk.Frame(account_selection_frame)
+        checklist_canvas = tk.Canvas(account_checklist_scroll_frame, height=100, highlightthickness=0, bg=ttk.Style().lookup('TFrame', 'background'))
+        checklist_scrollbar = ttk.Scrollbar(account_checklist_scroll_frame, orient="vertical", command=checklist_canvas.yview)
+        checklist_canvas.configure(yscrollcommand=checklist_scrollbar.set)
+        checklist_inner_frame = ttk.Frame(checklist_canvas)
+        checklist_canvas.pack(side="left", fill="both", expand=True)
+        checklist_scrollbar.pack(side="right", fill="y")
+        checklist_canvas_frame_id = checklist_canvas.create_window((0, 0), window=checklist_inner_frame, anchor="nw")
+
+        def _configure_checklist_scroll(event=None):
+            checklist_canvas.configure(scrollregion=checklist_canvas.bbox("all"))
+            canvas_width = event.width if event else checklist_canvas.winfo_width()
+            checklist_canvas.itemconfig(checklist_canvas_frame_id, width=canvas_width)
+
+        checklist_inner_frame.bind("<Configure>", _configure_checklist_scroll)
+        checklist_canvas.bind("<Configure>", _configure_checklist_scroll)
+
+        def _on_checklist_mousewheel(event):
+            if event.delta: delta = -1 * (event.delta // 120)
+            elif event.num == 5: delta = 1
+            elif event.num == 4: delta = -1
+            else: delta = 0
+            checklist_canvas.yview_scroll(delta, "units")
+
+        checklist_canvas.bind("<MouseWheel>", _on_checklist_mousewheel)
+        checklist_inner_frame.bind("<MouseWheel>", _on_checklist_mousewheel)
+
+        account_selection_frame.bind("<Map>", lambda e: checklist_canvas.bind_all("<MouseWheel>", _on_checklist_mousewheel))
+        account_selection_frame.bind("<Unmap>", lambda e: checklist_canvas.unbind_all("<MouseWheel>"))
+
+        webhook_data["checklist_frame"] = checklist_inner_frame
+        webhook_data["checklist_scroll_frame"] = account_checklist_scroll_frame
+        webhook_data["account_vars"] = {}
+        self._populate_account_checklist(webhook_data)
         self._toggle_account_selection(webhook_data, initial_state=initial_notify_all)
         self.webhook_entries.append(webhook_data)
         return webhook_data
 
-    def _populate_account_listbox(self, webhook_data):
-        """Populates the listbox for a specific webhook entry with configured accounts."""
-        listbox = webhook_data.get("listbox"); selected_accounts_lower = {acc.lower() for acc in webhook_data.get("selected_accounts", [])}
-        if not listbox: return
-        listbox.delete(0, tk.END); account_indices = {}
+    def _populate_account_checklist(self, webhook_data):
+        """Populates the checkbutton list for a specific webhook entry."""
+        checklist_frame = webhook_data.get("checklist_frame")
+        if not checklist_frame: return
+
+        for widget in checklist_frame.winfo_children():
+            widget.destroy()
+        webhook_data["account_vars"] = {}
+
+        selected_accounts_lower = {acc.lower() for acc in webhook_data.get("selected_accounts", [])}
         sorted_accounts = sorted(self.app.accounts, key=lambda x: x.get("username", "").lower())
-        for index, account in enumerate(sorted_accounts):
+
+        if not sorted_accounts:
+             ttk.Label(checklist_frame, text="No accounts configured.", font=("TkDefaultFont", 8, "italic")).pack(padx=5, pady=5)
+             return
+
+        for account in sorted_accounts:
             username = account.get("username")
             if username:
-                listbox.insert(tk.END, username); account_indices[username] = index
-                if username.lower() in selected_accounts_lower: listbox.selection_set(index)
-        webhook_data["account_indices"] = account_indices
+                is_selected = username.lower() in selected_accounts_lower
+                var = tk.BooleanVar(value=is_selected)
+                cb = ttk.Checkbutton(checklist_frame, text=username, variable=var, command=lambda data=webhook_data: self._update_selected_accounts_from_checklist(data))
+                cb.pack(anchor='w', fill='x', padx=5)
+                webhook_data["account_vars"][username] = var
 
     def _toggle_account_selection(self, webhook_data, initial_state=None):
-        """Shows or hides the account selection listbox based on the 'Notify All' checkbox."""
+        """Shows or hides the account selection checklist based on the 'Notify All' checkbox."""
         notify_all = webhook_data["notify_all_var"].get() if initial_state is None else initial_state
-        selection_frame = webhook_data.get("selection_frame")
-        if not selection_frame: return
-        if notify_all: selection_frame.pack_forget(); webhook_data["selected_accounts"] = []
-        else: selection_frame.pack(fill='x', pady=(0, 5)); self._populate_account_listbox(webhook_data); self._update_selected_accounts(webhook_data)
+        checklist_scroll_frame = webhook_data.get("checklist_scroll_frame")
+        if not checklist_scroll_frame: return
+        if notify_all:
+             checklist_scroll_frame.pack_forget()
+             webhook_data["selected_accounts"] = []
+        else:
+             checklist_scroll_frame.pack(fill='x', pady=(0, 5), padx=8)
+             self._populate_account_checklist(webhook_data)
+             self._update_selected_accounts_from_checklist(webhook_data)
         self.app.config_changed = True
 
     def _update_selected_accounts(self, webhook_data):
         """Updates the list of selected accounts based on listbox selection."""
-        listbox = webhook_data.get("listbox")
-        if not listbox: return
-        selected_usernames = [listbox.get(i) for i in listbox.curselection()]
+        pass
+
+    def _update_selected_accounts_from_checklist(self, webhook_data):
+        """Updates the list of selected accounts based on checklist state."""
+        account_vars = webhook_data.get("account_vars", {})
+        selected_usernames = [username for username, var in account_vars.items() if var.get()]
         webhook_data["selected_accounts"] = selected_usernames
         self.app.config_changed = True
 
@@ -376,7 +425,7 @@ class GuiManager:
         dc_label.pack(anchor="w", padx=10, pady=5); dc_label.bind("<Button-1>", lambda e: webbrowser.open("https://discord.gg/6cuCu6ymkX")); create_tooltip(dc_label, "Join Discord")
         gh_label = ttk.Label(support_frame, text="GitHub Repository: View Source", cursor="hand2", foreground="#007bff")
         gh_label.pack(anchor="w", padx=10, pady=5); gh_label.bind("<Button-1>", lambda e: webbrowser.open("https://github.com/cresqnt-sys/MultiScope")); create_tooltip(gh_label, "View Source")
-        ttk.Label(frame, text="© 2025 cresqnt. All rights reserved.").pack(side="bottom", pady=(10, 5), anchor='s')
+        ttk.Label(frame, text="© 2024 cresqnt. All rights reserved.").pack(side="bottom", pady=(10, 5), anchor='s')
 
     def show_message_box(self, title, message, msg_type="info"):
         """Shows a standard message box."""
@@ -624,8 +673,8 @@ class GuiManager:
         accounts_canvas.configure(scrollregion=accounts_canvas.bbox("all"))
 
     def refresh_webhook_account_lists(self):
-        """Refreshes the account listboxes in all webhook entries."""
-        for webhook_data in self.webhook_entries: self._populate_account_listbox(webhook_data)
+        """Refreshes the account checklists in all webhook entries."""
+        for webhook_data in self.webhook_entries: self._populate_account_checklist(webhook_data)
 
 class SnippingWidget:
     def __init__(self, root, config_key=None, callback=None):
