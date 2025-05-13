@@ -125,7 +125,18 @@ def save_json_data(filename, data):
 
 def load_config(default_biome_data_keys):
     """Loads the main configuration file."""
-    default_config = {"biome_counts": {biome: 0 for biome in default_biome_data_keys}, "session_time": "0:00:00", "accounts": [], "webhooks": []}
+    default_config = {
+        "biome_counts": {biome: 0 for biome in default_biome_data_keys},
+        "session_time": "0:00:00",
+        "accounts": [],
+        "webhooks": [],
+        "merchant_webhook_url": "",
+        "merchant_notification_enabled": True,
+        "merchant_jester_enabled": True,
+        "merchant_mari_enabled": True,
+        "merchant_jester_ping_config": {"id": "", "type": "None"},
+        "merchant_mari_ping_config": {"id": "", "type": "None"}
+    }
     legacy_paths = [
         "config.json",
         "source_code/config.json",
@@ -282,125 +293,106 @@ def get_latest_log_file(logs_dir=ROBLOX_LOGS_DIR):
 
     return log_files[0]
 
-def setup_roblox_feature_flags():
-    """Set up Roblox feature flags for enhanced logging. Returns list of paths modified."""
-    modified_paths = []
-    try:
-        feature_flags = {
+def apply_roblox_fastflags(update_status_callback=None):
+    """Apply Roblox FastFlag settings for logging"""
+    local_app_data = os.getenv('LOCALAPPDATA')
+    if not local_app_data:
+        if update_status_callback:
+            update_status_callback("Error: LOCALAPPDATA environment variable not found.")
+        return
 
-            "DFLogHttpStatus": "2", 
-            "FFlagDebugLuaFullStackTraces": "True", 
+    required_flags = {
+        "FStringDebugLuaLogLevel": "trace",
+        "FStringDebugLuaLogPattern": "ExpChat/mountClientApp"
+    }
+    applied_count = 0
+    updated_count = 0
 
-            "FStringDebugLuaLogLevel": "verbose", 
-            "FStringDebugLuaLogPattern": "ExpChat/mountClientApp|PlayerScripts.Game.Location", 
+    def update_json_file(json_file_path, launcher_info_str):
+        nonlocal applied_count, updated_count
+        current_settings = {}
+        needs_update = False
+        file_existed = False
+        file_dir = os.path.dirname(json_file_path)
 
-        }
+        try:
+            os.makedirs(file_dir, exist_ok=True)
 
-        roblox_version_paths = set()
+            if os.path.exists(json_file_path):
+                file_existed = True
+                try:
+                    with open(json_file_path, 'r') as f:
+                        content = f.read()
+                        if content.strip(): 
+                            current_settings = json.loads(content)
+                        else:
+                            current_settings = {} 
+                except json.JSONDecodeError:
+                    if update_status_callback:
+                        update_status_callback(f"Warning: Corrupt JSON found at {json_file_path}. Overwriting for {launcher_info_str}.")
+                    current_settings = {}
+                    needs_update = True
+                except Exception as read_err:
+                    if update_status_callback:
+                        update_status_callback(f"Warning: Error reading {json_file_path}: {read_err}. Overwriting for {launcher_info_str}.")
+                    current_settings = {}
+                    needs_update = True
+            else:
+                needs_update = True
 
-        registry_paths = [
-            (winreg.HKEY_CURRENT_USER, r"Software\Roblox\RobloxStudioBrowser\roblox.com"),
-            (winreg.HKEY_LOCAL_MACHINE, r"Software\Roblox\Roblox"),
-            (winreg.HKEY_LOCAL_MACHINE, r"Software\WOW6432Node\Roblox\Roblox") 
-        ]
-        for hkey, path in registry_paths:
-            try:
-                with winreg.OpenKey(hkey, path, 0, winreg.KEY_READ) as key:
-                    try:
+            for key, value in required_flags.items():
+                if key not in current_settings or current_settings[key] != value:
+                    current_settings[key] = value
+                    needs_update = True
 
-                        install_path_value, _ = winreg.QueryValueEx(key, "LastInstallPath") 
+            if needs_update:
+                with open(json_file_path, 'w') as f:
+                    json.dump(current_settings, f, indent=2)
+                if file_existed:
+                    updated_count += 1
+                    if update_status_callback:
+                        update_status_callback(f"Updated FastFlags in {launcher_info_str} file")
+                else:
+                    applied_count += 1
+                    if update_status_callback:
+                        update_status_callback(f"Applied FastFlags to new file in {launcher_info_str}")
 
-                        current_path = os.path.dirname(install_path_value)
-                        found_versions = False
-                        for _ in range(5): 
-                            if os.path.basename(current_path).lower() == 'versions':
-                                roblox_version_paths.add(current_path)
-                                found_versions = True
-                                break
-                            parent_path = os.path.dirname(current_path)
-                            if parent_path == current_path: break 
-                            current_path = parent_path
+        except Exception as e:
+            if update_status_callback:
+                update_status_callback(f"Error processing FastFlags for {launcher_info_str}: {e}")
 
-                        if not found_versions and os.path.exists(os.path.join(os.path.dirname(install_path_value), "RobloxPlayerBeta.exe")):
-                             roblox_version_paths.add(os.path.dirname(install_path_value))
+    mod_launchers_config_files = {
+        'Bloxstrap': os.path.join(local_app_data, 'Bloxstrap', 'Modifications', 'ClientSettings', 'ClientAppSettings.json'),
+        'Fishstrap': os.path.join(local_app_data, 'Fishstrap', 'Modifications', 'ClientSettings', 'ClientAppSettings.json')
+    }
 
-                    except WindowsError: pass 
-            except WindowsError: pass 
+    for launcher_name, target_json_path in mod_launchers_config_files.items():
+        launcher_base_dir = os.path.dirname(os.path.dirname(os.path.dirname(target_json_path)))
+        if os.path.isdir(launcher_base_dir):
+            update_json_file(target_json_path, f"{launcher_name} Modifications")
 
-        env_vars = ['PROGRAMFILES', 'PROGRAMFILES(X86)', 'LOCALAPPDATA']
-        common_subdirs = [
-             ('Roblox', 'Versions'),
-             ('Bloxstrap', 'Versions'), 
-             ('Fishstrap', 'Versions') 
-        ]
-        for env_var in env_vars:
-            base_env_path = os.environ.get(env_var)
-            if base_env_path:
-                for parent_dir, versions_dir in common_subdirs:
-                     full_base_path = os.path.join(base_env_path, parent_dir, versions_dir)
-                     if os.path.exists(full_base_path):
+    roblox_versions_path = os.path.join(local_app_data, 'Roblox', 'Versions')
+    if os.path.isdir(roblox_versions_path):
+        try:
+            for item_name in os.listdir(roblox_versions_path):
+                item_path = os.path.join(roblox_versions_path, item_name)
 
-                          for folder in os.listdir(full_base_path):
-                               version_path = os.path.join(full_base_path, folder)
-                               if os.path.isdir(version_path):
+                if os.path.isdir(item_path) and item_name.startswith("version-"): # Modified to match user's code
+                    version_folder_path = item_path
+                    client_settings_path = os.path.join(version_folder_path, 'ClientSettings')
+                    json_file_path = os.path.join(client_settings_path, 'ClientAppSettings.json')
 
-                                   exe_files = ['RobloxPlayerBeta.exe', 'RobloxPlayerLauncher.exe'] 
-                                   if any(os.path.exists(os.path.join(version_path, exe)) for exe in exe_files):
-                                        roblox_version_paths.add(version_path)
+                    update_json_file(json_file_path, f"Roblox/{item_name}")
+        except OSError as e: # Modified to match user's code
+            if update_status_callback:
+                update_status_callback(f"Error accessing Roblox versions directory: {e}")
 
-        if not roblox_version_paths:
-            print("WARNING: No Roblox installations found via registry or common folders.")
-            return modified_paths 
-
-        print(f"Found {len(roblox_version_paths)} potential Roblox installation folder(s). Applying settings...")
-
-        for version_path in roblox_version_paths:
-            try:
-                client_settings_dir = os.path.join(version_path, 'ClientSettings')
-                os.makedirs(client_settings_dir, exist_ok=True)
-                settings_file = os.path.join(client_settings_dir, 'ClientAppSettings.json')
-
-                current_settings = {}
-                if os.path.exists(settings_file):
-                    try:
-
-                        try: os.chmod(settings_file, 0o666)
-                        except Exception: pass
-                        with open(settings_file, 'r', encoding='utf-8') as f:
-                            current_settings = json.load(f)
-                    except json.JSONDecodeError:
-                        print(f"WARNING: Existing ClientAppSettings.json in {version_path} is corrupted. Overwriting.")
-                        current_settings = {} 
-                    except Exception as read_e:
-                         error_logging(read_e, f"Error reading settings file in {version_path}")
-                         continue 
-
-                needs_update = False
-                for flag, value in feature_flags.items():
-                    if flag not in current_settings or current_settings[flag] != value:
-                        current_settings[flag] = value
-                        needs_update = True
-
-                if needs_update:
-                    try:
-
-                         try: os.chmod(settings_file, 0o666)
-                         except Exception: pass
-                         with open(settings_file, 'w', encoding='utf-8') as f:
-                            json.dump(current_settings, f, indent=4)
-                         print(f"Updated feature flags in {version_path}")
-                         modified_paths.append(version_path)
-                    except Exception as write_e:
-                         error_logging(write_e, f"Error writing updated settings file in {version_path}")
-
-            except Exception as e:
-                error_logging(e, f"Error processing feature flags for {version_path}")
-
-        return modified_paths
-
-    except Exception as e:
-        error_logging(e, "Error setting up Roblox feature flags")
-        return modified_paths 
+    if applied_count > 0 or updated_count > 0:
+        if update_status_callback:
+            update_status_callback(f"Finished applying/updating FastFlags ({applied_count} new, {updated_count} updated)." )
+    else:
+        if update_status_callback:
+            update_status_callback("FastFlags check complete. No changes needed or relevant folders found.")
 
 def parse_session_time(session_time_str):
     """Parse session time from H:M:S string format to seconds."""
@@ -428,10 +420,8 @@ def format_session_time(total_seconds):
     return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
 def check_for_updates(current_version, repo_url="https://api.github.com/repos/cresqnt-sys/MultiScope/releases"):
-    """Checks GitHub releases for a newer version. Returns release info or None."""
+    """Checks GitHub releases for a newer version by comparing against the latest tag. Returns release info or None."""
     print(f"Checking for updates... Current version: {current_version}")
-    is_testing_version = "-Testing" in current_version or "-Beta" in current_version
-    current_base_version_str = current_version.split('-')[0]
 
     try:
         response = requests.get(repo_url, timeout=10) 
@@ -442,56 +432,20 @@ def check_for_updates(current_version, repo_url="https://api.github.com/repos/cr
             print("No releases found on GitHub.")
             return None
 
-        latest_release = None
-        latest_stable_release = None
-        latest_compatible_prerelease = None 
+        # Get the latest release (first in the list)
+        latest_release_info = all_releases[0]
+        latest_tag_name = latest_release_info.get('tag_name', '0.0.0')
+        if latest_tag_name.startswith('v'):
+            latest_tag_name = latest_tag_name[1:]
 
-        for release in all_releases:
-            tag_name = release.get('tag_name', '0.0.0')
-            if tag_name.startswith('v'): tag_name = tag_name[1:] 
+        # Add parsed_tag_name to the release info for consistency with how app.py uses it
+        latest_release_info['parsed_tag_name'] = latest_tag_name
 
-            is_prerelease = release.get('prerelease', False)
-            release_base_version_str = tag_name.split('-')[0]
-
-            if latest_release is None or compare_versions(tag_name, latest_release['tag_name'][1:]) > 0:
-
-                 release['parsed_tag_name'] = tag_name
-                 latest_release = release
-
-            if not is_prerelease:
-                if latest_stable_release is None or compare_versions(tag_name, latest_stable_release['parsed_tag_name']) > 0:
-                     release['parsed_tag_name'] = tag_name
-                     latest_stable_release = release
-
-            if is_prerelease or "-Testing" in tag_name or "-Beta" in tag_name:
-
-                 if compare_versions(release_base_version_str, current_base_version_str) >= 0:
-                     if latest_compatible_prerelease is None or compare_versions(tag_name, latest_compatible_prerelease['parsed_tag_name']) > 0:
-                          release['parsed_tag_name'] = tag_name
-                          latest_compatible_prerelease = release
-
-        target_release = None
-        if is_testing_version:
-
-            if latest_compatible_prerelease:
-                target_release = latest_compatible_prerelease
-            elif latest_stable_release and compare_versions(latest_stable_release['parsed_tag_name'], current_version) > 0:
-                 target_release = latest_stable_release
+        if compare_versions(latest_tag_name, current_version) > 0:
+            print(f"Update found: {latest_tag_name} (Current: {current_version})")
+            return latest_release_info 
         else:
-
-            if latest_stable_release and compare_versions(latest_stable_release['parsed_tag_name'], current_version) > 0:
-                target_release = latest_stable_release
-
-        if target_release:
-            latest_version_tag = target_release['parsed_tag_name']
-            if compare_versions(latest_version_tag, current_version) > 0:
-                print(f"Update found: {latest_version_tag} (Current: {current_version})")
-                return target_release 
-            else:
-                 print("Current version is up to date.")
-                 return None
-        else:
-            print("Could not determine a suitable update release.")
+            print("Current version is up to date or newer than the latest tag.")
             return None
 
     except requests.exceptions.RequestException as e:

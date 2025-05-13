@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.5-Beta] - 2025-05-13
+### Added
+- Added tooltip descriptions for various UI elements (test webhook button, Discord/GitHub links).
+- Implemented dynamic adjustment of scrollable areas (webhook list, account checklist) based on content and window size.
+- Added error handling for webhook testing (`show_message_box`).
+- Added MULTI MERCHANT support
+
+### Changed
+- Refactored webhook account selection UI in `main.py` (`_add_webhook_entry`, `_populate_account_checklist`, `_toggle_account_selection`).
+- Corrected `test_webhook` calls in `detection.py` to use `self.app.gui_manager.show_message_box`.
+- Improved mousewheel scrolling behavior for nested scrollable frames.
+- Ensured account lists in webhook settings refresh when accounts are managed.
+
+### Fixed
+- Resolved `AttributeError` when testing webhooks due to incorrect `show_message_box` calls.
+- Addressed potential UI layout issues with nested scroll frames and dynamic content.
+- Fixed bug where removing a webhook entry might cause index errors or incorrect numbering.
+- Ensured mousewheel binding/unbinding is handled correctly for different tabs.
+
 ## [0.9.5-Alpha] - 2025-04-22
 ### Added
 - Implemented checkmarks for account selection per webhook, replacing the previous listbox implementation.

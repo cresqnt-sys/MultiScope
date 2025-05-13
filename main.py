@@ -7,13 +7,13 @@ import ttkbootstrap as ttk
 from tkinter import messagebox, filedialog
 from PIL import Image, ImageTk 
 import webbrowser
-from datetime import datetime
+from datetime import datetime, timezone
 import ctypes 
 
 from utils import create_tooltip, error_logging 
 
 APP_NAME = "MultiScope"
-APP_VERSION = "0.9.5-Alpha" 
+APP_VERSION = "0.9.5-Beta" 
 MYAPPID = f"{APP_NAME}.App.{APP_VERSION}"
 try:
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(MYAPPID)
@@ -92,9 +92,11 @@ class GuiManager:
         webhook_frame = ttk.Frame(self.notebook)
         stats_frame = ttk.Frame(self.notebook)
         credits_frame = ttk.Frame(self.notebook)
+        merchant_frame = ttk.Frame(self.notebook)
 
         self.notebook.add(webhook_frame, text='Webhooks & Control')
         self.notebook.add(stats_frame, text='Stats & Logs')
+        self.notebook.add(merchant_frame, text='Merchants')
 
         if self.app.has_antiafk and self.antiafk:
             try:
@@ -110,6 +112,7 @@ class GuiManager:
         self._create_webhook_tab(webhook_frame)
         self._create_stats_tab(stats_frame)
         self._create_credit_tab(credits_frame)
+        self._create_merchant_tab(merchant_frame)
 
         self.status_frame = ttk.Frame(self.root)
         self.status_frame.pack(fill=tk.X, side=tk.BOTTOM, padx=10, pady=5)
@@ -415,9 +418,9 @@ class GuiManager:
         ttk.Label(frame, text="A Sols RNG Biome & Multi-Account Tracker.", wraplength=400).pack(pady=10)
 
         credits_frame = ttk.LabelFrame(frame, text="Credits", padding=10); credits_frame.pack(fill="x", pady=10)
-        ttk.Label(credits_frame, text="Created by: cresqnt & Bored Man", font=("Arial", 10, "bold")).pack(anchor="w", padx=10, pady=5)
+        ttk.Label(credits_frame, text="Created by: cresqnt", font=("Arial", 10, "bold")).pack(anchor="w", padx=10, pady=5)
         ttk.Label(credits_frame, text="Contributors & Inspirations:", font=("Arial", 10, "bold")).pack(anchor="w", padx=10, pady=(10, 0))
-        contributors = ["Maxsteller (Original Inspiration)"]
+        contributors = ["Maxsteller (Original Inspiration)", "Bored Man (Biome Detection Rewrite)"]
         for c in contributors: ttk.Label(credits_frame, text=f"• {c}").pack(anchor="w", padx=30, pady=2)
 
         support_frame = ttk.LabelFrame(frame, text="Support & Links", padding=10); support_frame.pack(fill="x", pady=10)
@@ -425,6 +428,8 @@ class GuiManager:
         dc_label.pack(anchor="w", padx=10, pady=5); dc_label.bind("<Button-1>", lambda e: webbrowser.open("https://discord.gg/6cuCu6ymkX")); create_tooltip(dc_label, "Join Discord")
         gh_label = ttk.Label(support_frame, text="GitHub Repository: View Source", cursor="hand2", foreground="#007bff")
         gh_label.pack(anchor="w", padx=10, pady=5); gh_label.bind("<Button-1>", lambda e: webbrowser.open("https://github.com/cresqnt-sys/MultiScope")); create_tooltip(gh_label, "View Source")
+        scope_dev_label = ttk.Label(support_frame, text="Scope Development Website: scopedevelopment.tech", cursor="hand2", foreground="#007bff")
+        scope_dev_label.pack(anchor="w", padx=10, pady=5); scope_dev_label.bind("<Button-1>", lambda e: webbrowser.open("https://scopedevelopment.tech")); create_tooltip(scope_dev_label, "Visit Scope Development")
         ttk.Label(frame, text="© 2024 cresqnt. All rights reserved.").pack(side="bottom", pady=(10, 5), anchor='s')
 
     def show_message_box(self, title, message, msg_type="info"):
@@ -675,6 +680,189 @@ class GuiManager:
     def refresh_webhook_account_lists(self):
         """Refreshes the account checklists in all webhook entries."""
         for webhook_data in self.webhook_entries: self._populate_account_checklist(webhook_data)
+
+    def _create_merchant_tab(self, parent_frame):
+        """Creates the content for the Merchants tab."""
+        master_frame = ttk.Frame(parent_frame, padding=10)
+        master_frame.pack(fill="both", expand=True)
+
+        ttk.Label(master_frame, text="Merchant Notification Settings", font=("Arial", 12, "bold")).pack(pady=(0,10))
+
+        # Enable/Disable Checkbox
+        enable_frame = ttk.Frame(master_frame)
+        enable_frame.pack(fill='x', pady=5)
+        self.merchant_notify_var = tk.BooleanVar(value=self.app.detection_manager.merchant_notification_enabled)
+        ttk.Checkbutton(enable_frame, text="Enable Merchant Notifications (Master Switch)", variable=self.merchant_notify_var, command=self._save_merchant_settings).pack(anchor='w')
+
+        # Individual Merchant Toggles
+        self.merchant_jester_notify_var = tk.BooleanVar(value=self.app.detection_manager.merchant_jester_enabled)
+        ttk.Checkbutton(enable_frame, text="Enable Jester Notifications", variable=self.merchant_jester_notify_var, command=self._save_merchant_settings).pack(anchor='w', padx=(20,0))
+        
+        self.merchant_mari_notify_var = tk.BooleanVar(value=self.app.detection_manager.merchant_mari_enabled)
+        ttk.Checkbutton(enable_frame, text="Enable Mari Notifications", variable=self.merchant_mari_notify_var, command=self._save_merchant_settings).pack(anchor='w', padx=(20,0))
+
+        # Webhook URL Entry
+        webhook_url_frame = ttk.LabelFrame(master_frame, text="Merchant Webhook URL")
+        webhook_url_frame.pack(fill='x', pady=10)
+        
+        url_inner_frame = ttk.Frame(webhook_url_frame, padding=5)
+        url_inner_frame.pack(fill='x')
+
+        self.merchant_webhook_url_entry = ttk.Entry(url_inner_frame, show="*")
+        self.merchant_webhook_url_entry.insert(0, self.app.detection_manager.merchant_webhook_url)
+        self.merchant_webhook_url_entry.pack(side='left', fill='x', expand=True, padx=(0,10))
+        
+        show_btn = ttk.Button(url_inner_frame, text="Show", command=lambda: self.merchant_webhook_url_entry.configure(show=""), style="secondary.TButton", width=6)
+        show_btn.pack(side='left', padx=(0,5))
+        hide_btn = ttk.Button(url_inner_frame, text="Hide", command=lambda: self.merchant_webhook_url_entry.configure(show="*"), style="secondary.TButton", width=6)
+        hide_btn.pack(side='left')
+        
+        # --- Jester Ping Settings ---
+        jester_ping_frame = ttk.LabelFrame(master_frame, text="Jester Ping Settings")
+        jester_ping_frame.pack(fill='x', pady=10, after=webhook_url_frame)
+        jester_ping_inner_frame = ttk.Frame(jester_ping_frame, padding=5)
+        jester_ping_inner_frame.pack(fill='x')
+
+        ttk.Label(jester_ping_inner_frame, text="ID / Tag:").pack(side='left', padx=(0,5))
+        self.jester_ping_id_entry = ttk.Entry(jester_ping_inner_frame)
+        self.jester_ping_id_entry.insert(0, self.app.detection_manager.merchant_jester_ping_config.get("id", ""))
+        self.jester_ping_id_entry.pack(side='left', fill='x', expand=True, padx=(0,10))
+        create_tooltip(self.jester_ping_id_entry, "Enter User ID, Role ID, @everyone, @here, or a full ping tag like <@USER_ID>.")
+
+        ttk.Label(jester_ping_inner_frame, text="Type:").pack(side='left', padx=(0,5))
+        self.jester_ping_type_var = tk.StringVar(value=self.app.detection_manager.merchant_jester_ping_config.get("type", "None"))
+        self.jester_ping_type_combo = ttk.Combobox(jester_ping_inner_frame, textvariable=self.jester_ping_type_var, 
+                                                 values=["None", "User ID", "Role ID"], state="readonly", width=10)
+        self.jester_ping_type_combo.pack(side='left')
+        create_tooltip(self.jester_ping_type_combo, "Select 'User ID' or 'Role ID' if providing a raw ID above. Select 'None' if the ID field contains a full tag (e.g. <@&ID>) or specific keyword (e.g. @everyone).")
+
+        # --- Mari Ping Settings ---
+        mari_ping_frame = ttk.LabelFrame(master_frame, text="Mari Ping Settings")
+        mari_ping_frame.pack(fill='x', pady=10, after=jester_ping_frame)
+        mari_ping_inner_frame = ttk.Frame(mari_ping_frame, padding=5)
+        mari_ping_inner_frame.pack(fill='x')
+
+        ttk.Label(mari_ping_inner_frame, text="ID / Tag:").pack(side='left', padx=(0,5))
+        self.mari_ping_id_entry = ttk.Entry(mari_ping_inner_frame)
+        self.mari_ping_id_entry.insert(0, self.app.detection_manager.merchant_mari_ping_config.get("id", ""))
+        self.mari_ping_id_entry.pack(side='left', fill='x', expand=True, padx=(0,10))
+        create_tooltip(self.mari_ping_id_entry, "Enter User ID, Role ID, @everyone, @here, or a full ping tag like <@USER_ID>.")
+
+        ttk.Label(mari_ping_inner_frame, text="Type:").pack(side='left', padx=(0,5))
+        self.mari_ping_type_var = tk.StringVar(value=self.app.detection_manager.merchant_mari_ping_config.get("type", "None"))
+        self.mari_ping_type_combo = ttk.Combobox(mari_ping_inner_frame, textvariable=self.mari_ping_type_var, 
+                                               values=["None", "User ID", "Role ID"], state="readonly", width=10)
+        self.mari_ping_type_combo.pack(side='left')
+        create_tooltip(self.mari_ping_type_combo, "Select 'User ID' or 'Role ID' if providing a raw ID above. Select 'None' if the ID field contains a full tag (e.g. <@&ID>) or specific keyword (e.g. @everyone).")
+
+        # Buttons Frame
+        buttons_frame = ttk.Frame(master_frame)
+        buttons_frame.pack(fill='x', pady=20, side='bottom')
+
+        save_btn = ttk.Button(buttons_frame, text="Save Merchant Settings", command=self._save_merchant_settings, style="success.TButton")
+        save_btn.pack(side='left', padx=5)
+        
+        test_btn = ttk.Button(buttons_frame, text="Test Merchant Webhook", command=self._test_merchant_webhook, style="info.TButton")
+        test_btn.pack(side='left', padx=5)
+        create_tooltip(test_btn, "Sends a test Jester notification to the configured merchant webhook URL.")
+
+    def _save_merchant_settings(self):
+        """Saves the merchant notification settings from the GUI to the app config and DetectionManager."""
+        try:
+            new_url = self.merchant_webhook_url_entry.get().strip()
+            new_master_enabled_status = self.merchant_notify_var.get()
+            new_jester_enabled_status = self.merchant_jester_notify_var.get()
+            new_mari_enabled_status = self.merchant_mari_notify_var.get()
+
+            new_jester_ping_id = self.jester_ping_id_entry.get().strip()
+            new_jester_ping_type = self.jester_ping_type_var.get()
+            new_mari_ping_id = self.mari_ping_id_entry.get().strip()
+            new_mari_ping_type = self.mari_ping_type_var.get()
+
+            jester_ping_config = {"id": new_jester_ping_id, "type": new_jester_ping_type}
+            mari_ping_config = {"id": new_mari_ping_id, "type": new_mari_ping_type}
+
+            # Update DetectionManager directly
+            self.app.detection_manager.merchant_webhook_url = new_url
+            self.app.detection_manager.merchant_notification_enabled = new_master_enabled_status
+            self.app.detection_manager.merchant_jester_enabled = new_jester_enabled_status
+            self.app.detection_manager.merchant_mari_enabled = new_mari_enabled_status
+            self.app.detection_manager.merchant_jester_ping_config = jester_ping_config
+            self.app.detection_manager.merchant_mari_ping_config = mari_ping_config
+            
+            # Update app level attributes which get saved to config by app.save_state()
+            self.app.merchant_webhook_url = new_url
+            self.app.merchant_notification_enabled = new_master_enabled_status
+            self.app.merchant_jester_enabled = new_jester_enabled_status
+            self.app.merchant_mari_enabled = new_mari_enabled_status
+            self.app.merchant_jester_ping_config = jester_ping_config
+            self.app.merchant_mari_ping_config = mari_ping_config
+
+            self.app.config_changed = True # Mark for saving
+            self.app.save_state(periodic=True) # Trigger a save
+            self.show_message_box("Success", "Merchant settings saved!", "info")
+            self.app.append_log("Merchant settings updated and saved.")
+
+        except Exception as e:
+            error_logging(e, "Error saving merchant settings")
+            self.show_message_box("Error", f"Failed to save merchant settings: {e}", "error")
+
+    def _test_merchant_webhook(self):
+        """Sends a test merchant (Jester) notification to the configured merchant webhook URL."""
+        webhook_url = self.merchant_webhook_url_entry.get().strip()
+        if not webhook_url:
+            self.show_message_box("Error", "Merchant webhook URL is empty.", "error")
+            return
+
+        self.app.append_log(f"Attempting to send test merchant webhook to ...{webhook_url[-10:]}")
+
+        # Use the send_merchant_webhook method from detection_manager for consistency
+        # Need to provide some mock data for the test
+        test_username = "TestUser" # Default username
+        if self.app.accounts: # Check if there are any configured accounts
+            first_account = self.app.accounts[0]
+            if first_account and first_account.get("username"):
+                test_username = first_account.get("username")
+                self.app.append_log(f"Test merchant webhook will use account: {test_username}")
+            else:
+                self.app.append_log(f"First account has no username, using default '{test_username}' for test.")
+        else:
+            self.app.append_log(f"No accounts configured, using default '{test_username}' for test.")
+            
+        test_merchant_name = "Jester"
+        test_event_time_utc = datetime.now(timezone.utc) # Correct way to get timezone-aware UTC now
+
+        # Temporarily set the manager's URL and Jester ping config for the test, then restore
+        original_dm_url = self.app.detection_manager.merchant_webhook_url
+        original_jester_ping_config = self.app.detection_manager.merchant_jester_ping_config.copy() # Important to copy
+
+        current_jester_ping_id = self.jester_ping_id_entry.get().strip()
+        current_jester_ping_type = self.jester_ping_type_var.get()
+        
+        self.app.detection_manager.merchant_webhook_url = webhook_url
+        self.app.detection_manager.merchant_jester_ping_config = {
+            "id": current_jester_ping_id,
+            "type": current_jester_ping_type
+        }
+        
+        try:
+            # Call the actual send method
+            self.app.detection_manager.send_merchant_webhook(test_username, test_merchant_name, test_event_time_utc)
+            # send_merchant_webhook itself logs success/failure and handles rate limit display
+            # It doesn't return a status directly for this test function to show a message box easily,
+            # so we rely on its internal logging and assume success if no exception.
+            # A more robust test might involve a direct requests.post like the biome test webhook.
+            # For now, let's assume the internal logging of send_merchant_webhook is sufficient.
+            # We can add a simple success message if no exception.
+            self.show_message_box("Test Sent", "Test merchant webhook initiated. Check Discord and application logs for status.", "info")
+
+        except Exception as e:
+            error_logging(e, f"Error during test_merchant_webhook call to ...{webhook_url[-10:]}")
+            self.show_message_box("Error", f"Failed to send test merchant webhook: {e}", "error")
+        finally:
+            # Restore the original URL and Jester ping config in detection_manager
+            self.app.detection_manager.merchant_webhook_url = original_dm_url
+            self.app.detection_manager.merchant_jester_ping_config = original_jester_ping_config
 
 class SnippingWidget:
     def __init__(self, root, config_key=None, callback=None):

@@ -13,7 +13,7 @@ from detection import DetectionManager
 from utils import (
     error_logging, load_config, save_config, load_logs, save_logs,
     load_biome_data, load_auras_json, parse_session_time, format_session_time,
-    setup_locale, setup_roblox_feature_flags, check_for_updates, download_update,
+    setup_locale, apply_roblox_fastflags, check_for_updates, download_update,
     get_ps_link_for_user, APP_NAME 
 )
 
@@ -26,7 +26,7 @@ except ImportError:
     print("AntiAFK module not found or failed to import. Anti-AFK features disabled.")
     AntiAFK = None 
 
-APP_VERSION = "0.0.9-Alpha" 
+APP_VERSION = "0.9.5-Beta" 
 
 class MultiScopeApp:
     def __init__(self, gui_manager_class=None):
@@ -55,6 +55,14 @@ class MultiScopeApp:
         self.accounts = self.config.get("accounts", [])
         self.biome_counts = self.config.get("biome_counts", {b: 0 for b in self.biome_data})
         self.active_accounts = set() 
+
+        # Load merchant-specific config
+        self.merchant_webhook_url = self.config.get("merchant_webhook_url", "")
+        self.merchant_notification_enabled = self.config.get("merchant_notification_enabled", True)
+        self.merchant_jester_enabled = self.config.get("merchant_jester_enabled", True)
+        self.merchant_mari_enabled = self.config.get("merchant_mari_enabled", True)
+        self.merchant_jester_ping_config = self.config.get("merchant_jester_ping_config", {"id": "", "type": "None"})
+        self.merchant_mari_ping_config = self.config.get("merchant_mari_ping_config", {"id": "", "type": "None"})
 
         self.session_start_time = None
         self.saved_session_seconds = parse_session_time(self.config.get("session_time", "0:00:00"))
@@ -91,9 +99,7 @@ class MultiScopeApp:
         self.active_accounts = {acc.get("username", "").lower() for acc in self.accounts if acc.get("active") and acc.get("username")}
 
         if self.config.get("apply_feature_flags_on_startup", True): 
-             modified_paths = setup_roblox_feature_flags()
-             if modified_paths:
-                  self.append_log(f"Applied Roblox feature flags to: {', '.join(modified_paths)}")
+             apply_roblox_fastflags(self.append_log)
 
         self.detection_manager.reset_detection_states()
 
@@ -252,6 +258,14 @@ class MultiScopeApp:
         self.config["dont_ask_for_update"] = self.config.get("dont_ask_for_update", False)
         self.config["biome_notification_enabled"] = self.config.get("biome_notification_enabled", {})
         self.config["biome_notifier"] = self.config.get("biome_notifier", {})
+
+        # Save merchant-specific config from app level (which GUI will update)
+        self.config["merchant_webhook_url"] = getattr(self, 'merchant_webhook_url', "")
+        self.config["merchant_notification_enabled"] = getattr(self, 'merchant_notification_enabled', True)
+        self.config["merchant_jester_enabled"] = getattr(self, 'merchant_jester_enabled', True)
+        self.config["merchant_mari_enabled"] = getattr(self, 'merchant_mari_enabled', True)
+        self.config["merchant_jester_ping_config"] = getattr(self, 'merchant_jester_ping_config', {"id": "", "type": "None"})
+        self.config["merchant_mari_ping_config"] = getattr(self, 'merchant_mari_ping_config', {"id": "", "type": "None"})
 
         if self.has_antiafk and self.antiafk:
              try:
