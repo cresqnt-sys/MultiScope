@@ -13,7 +13,6 @@
 ---
 
 **MultiScope** is a Python application designed to track Biome Changes in Sols RNG across multiple accounts. | Formerly BiomeScope
-# There is something major happening, a new repo will be posted in the near future with more information, this repo is going to be archived for the time being.
 
 ## ✨ Features
 
