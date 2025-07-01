@@ -104,7 +104,7 @@ class AntiAFK:
         self.action_combo = ttk.Combobox(
             controls_frame,
             textvariable=self.action_type_var,
-            values=["space", "ws", "zoom"],
+            values=["space", "ws", "zoom", "AutoReconnect"],
             width=10,
             state="readonly"
         )
@@ -588,6 +588,29 @@ class AntiAFK:
                 ctypes.windll.user32.keybd_event(vk_code_o, scan_code_o, 0, 0)
                 time.sleep(ALT_DELAY / 1000.0)
                 ctypes.windll.user32.keybd_event(vk_code_o, scan_code_o, win32con.KEYEVENTF_KEYUP, 0)
+                
+            elif action_type == 'AutoReconnect':
+                # Press '\' (universal method)
+                vk_code_backslash = ctypes.windll.user32.VkKeyScanA(ord('\\')) & 0xFF
+                scan_code_backslash = map_virtual_key(vk_code_backslash)
+                ctypes.windll.user32.keybd_event(vk_code_backslash, scan_code_backslash, 0, 0)
+                time.sleep(ALT_DELAY / 1000.0)
+                ctypes.windll.user32.keybd_event(vk_code_backslash, scan_code_backslash, win32con.KEYEVENTF_KEYUP, 0)
+                time.sleep(ALT_DELAY / 1000.0)
+
+                # Press 'Enter'
+                vk_code_enter = 0x0D  # Virtual key code for Enter
+                scan_code_enter = map_virtual_key(vk_code_enter)
+                ctypes.windll.user32.keybd_event(vk_code_enter, scan_code_enter, 0, 0)
+                time.sleep(ALT_DELAY / 1000.0)
+                ctypes.windll.user32.keybd_event(vk_code_enter, scan_code_enter, win32con.KEYEVENTF_KEYUP, 0)
+                time.sleep(ALT_DELAY / 1000.0)
+
+                # Press '\' again
+                ctypes.windll.user32.keybd_event(vk_code_backslash, scan_code_backslash, 0, 0)
+                time.sleep(ALT_DELAY / 1000.0)
+                ctypes.windll.user32.keybd_event(vk_code_backslash, scan_code_backslash, win32con.KEYEVENTF_KEYUP, 0)
+
 
             time.sleep(ACTION_DELAY / 1000.0)
 
