@@ -441,11 +441,11 @@ class DetectionManager:
         content = ""
         user_id_to_ping = None
         if event_type == "start":
-             if biome in ["GLITCHED", "DREAMSPACE", "BLAZING SUN"]:
+             if biome in ["GLITCHED", "DREAMSPACE"]:
                  content = "@everyone"
 
              elif message_type == "Ping":
-                  pass 
+                  pass
 
         biome_emoji = biome_info.get("emoji", "🌍")
         title = f"{biome_emoji} {biome} Biome Started" if event_type == "start" else f"{biome_emoji} {biome} Biome Ended"
