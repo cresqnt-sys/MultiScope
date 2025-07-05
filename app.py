@@ -2,44 +2,37 @@ import os
 import sys
 import time
 import threading
-import keyboard 
-import webbrowser 
-import requests 
+import keyboard
+import webbrowser
+import requests
 from datetime import datetime, timedelta
-from collections import deque 
-from configparser import ConfigParser 
+from collections import deque
+from configparser import ConfigParser
 
 from detection import DetectionManager
 from utils import (
     error_logging, load_config, save_config, load_logs, save_logs,
     load_biome_data, load_auras_json, parse_session_time, format_session_time,
     setup_locale, apply_roblox_fastflags, check_for_updates, download_update,
-    get_ps_link_for_user, APP_NAME 
+    get_ps_link_for_user, APP_NAME
 )
 
 try:
-
     from antiafk import AntiAFK
     HAS_ANTIAFK = True
 except ImportError:
     HAS_ANTIAFK = False
     print("AntiAFK module not found or failed to import. Anti-AFK features disabled.")
-    AntiAFK = None 
+    AntiAFK = None
 
-APP_VERSION = "0.9.5-Beta" 
+APP_VERSION = "0.9.6-Alpha"
 
 class MultiScopeApp:
     def __init__(self, gui_manager_class=None):
-        """Initialize the MultiScope Application.
-
-        Args:
-            gui_manager_class: The class to use for the GUI Manager.
-                               Defaults to None, but should be provided by main.py.
-        """
         self.version = APP_VERSION
-        self.myappid = f"{APP_NAME}.App.{self.version}" 
+        self.myappid = f"{APP_NAME}.App.{self.version}"
         self.has_antiafk = HAS_ANTIAFK
-        self.antiafk = None 
+        self.antiafk = None
 
         self.detection_running = False
         self.stop_event = threading.Event()
@@ -56,7 +49,6 @@ class MultiScopeApp:
         self.biome_counts = self.config.get("biome_counts", {b: 0 for b in self.biome_data})
         self.active_accounts = set() 
 
-        # Load merchant-specific config
         self.merchant_webhook_url = self.config.get("merchant_webhook_url", "")
         self.merchant_notification_enabled = self.config.get("merchant_notification_enabled", True)
         self.merchant_jester_enabled = self.config.get("merchant_jester_enabled", True)
@@ -89,16 +81,14 @@ class MultiScopeApp:
         self._setup_hotkeys()
 
     def _initialize_state(self):
-        """Initializes application state based on loaded config."""
-
         for biome in self.biome_data:
             if biome not in self.biome_counts:
                 self.biome_counts[biome] = 0
-        self.config["biome_counts"] = self.biome_counts 
+        self.config["biome_counts"] = self.biome_counts
 
         self.active_accounts = {acc.get("username", "").lower() for acc in self.accounts if acc.get("active") and acc.get("username")}
 
-        if self.config.get("apply_feature_flags_on_startup", True): 
+        if self.config.get("apply_feature_flags_on_startup", True):
              apply_roblox_fastflags(self.append_log)
 
         self.detection_manager.reset_detection_states()
@@ -106,7 +96,6 @@ class MultiScopeApp:
         print(f"Initialized with {len(self.accounts)} accounts, {len(self.active_accounts)} active.")
 
     def _setup_hotkeys(self):
-         """Sets up global hotkeys using the keyboard library."""
          try:
              keyboard.add_hotkey('F1', self.start_detection)
              keyboard.add_hotkey('F2', self.stop_detection)
@@ -119,16 +108,13 @@ class MultiScopeApp:
                   self.gui_manager.show_message_box("Hotkey Error", "Failed to register global hotkeys (F1/F2). They may not function correctly. Ensure the application has necessary permissions.", "warning")
 
     def run(self):
-        """Starts the application GUI and main loop."""
-
         if not hasattr(self, 'gui_manager') or not self.gui_manager:
              print("FATAL: GUI Manager not initialized.")
              return
         self.gui_manager.setup_gui()
-        self.gui_manager.run() 
+        self.gui_manager.run()
 
     def start_detection(self):
-        """Starts the biome detection background thread."""
         if self.detection_running:
             self.append_log("⚠️ Detection already running!")
             return
@@ -136,8 +122,8 @@ class MultiScopeApp:
         try:
             self.detection_running = True
             self.stop_event.clear()
-            self.session_start_time = datetime.now() 
-            self.program_start_time_iso = datetime.now().strftime("%Y-%m-%dT%H:%M:%S") 
+            self.session_start_time = datetime.now()
+            self.program_start_time_iso = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
             self.append_log(f"🚀 Starting detection at {self.session_start_time.strftime('%Y-%m-%d %H:%M:%S')}")
             self.append_log(f"Resetting log processing timestamp to: {self.program_start_time_iso}")
 
