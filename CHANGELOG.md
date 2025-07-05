@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.6-Alpha] - 2025-07-05
+### Added
+- Added new "BLAZING SUN" biome detection with hover text "BLAZING SUN" and asset ID 107114559110957
+- Implemented automatic Tcl/Tk library path detection to resolve GUI startup issues
+- Added other minor bug fixes
+
+### Changed
+- "BLAZING SUN" biome is now configured as an "always on" biome (like GLITCHED and DREAMSPACE)
+- Updated biome data loading to preserve emoji information from default configurations
+
+### Fixed
+- Resolved "Can't find a usable init.tcl" error that prevented application startup
+- Fixed biome data loading to ensure all biomes appear in configuration interface
+
 ## [0.9.5-Beta] - 2025-05-13
 ### Added
 - Added tooltip descriptions for various UI elements (test webhook button, Discord/GitHub links).

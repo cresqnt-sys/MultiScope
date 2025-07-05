@@ -326,25 +326,25 @@ class DetectionManager:
             self.app.append_log(f"⏭️ Skipping first biome notification for {username} to prevent false positives")
             return
 
-        message_type = self.app.config.get("biome_notifier", {}).get(biome, "Message") 
+        message_type = self.app.config.get("biome_notifier", {}).get(biome, "Message")
         notification_enabled = self.app.config.get("biome_notification_enabled", {}).get(biome, True)
 
-        if biome in ["GLITCHED", "DREAMSPACE"]:
-            message_type = "Ping" 
-            notification_enabled = True 
+        if biome in ["GLITCHED", "DREAMSPACE", "BLAZING SUN"]:
+            message_type = "Ping"
+            notification_enabled = True
         elif biome == "NORMAL":
-            notification_enabled = False  
+            notification_enabled = False
 
         webhook_tasks = []
 
         if previous_biome and previous_biome in self.biome_data:
             prev_message_type = self.app.config.get("biome_notifier", {}).get(previous_biome, "Message")
             prev_notification_enabled = self.app.config.get("biome_notification_enabled", {}).get(previous_biome, True)
-            if previous_biome in ["GLITCHED", "DREAMSPACE"]: 
-                prev_message_type = "Message" 
+            if previous_biome in ["GLITCHED", "DREAMSPACE", "BLAZING SUN"]:
+                prev_message_type = "Message"
                 prev_notification_enabled = True
             elif previous_biome == "NORMAL":
-                prev_notification_enabled = False  
+                prev_notification_enabled = False
 
             if prev_message_type != "None" and prev_notification_enabled:
                 webhook_tasks.append(("end", previous_biome, prev_message_type))
@@ -441,7 +441,7 @@ class DetectionManager:
         content = ""
         user_id_to_ping = None
         if event_type == "start":
-             if biome in ["GLITCHED", "DREAMSPACE"]:
+             if biome in ["GLITCHED", "DREAMSPACE", "BLAZING SUN"]:
                  content = "@everyone"
 
              elif message_type == "Ping":
