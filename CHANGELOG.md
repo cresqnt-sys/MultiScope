@@ -7,7 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.9.6-Alpha] - 2025-07-05
+## [0.9.7-Beta] - 2025-07-06
+### Fixed
+- Fixed BLAZING SUN biome detection issues for existing users by implementing automatic biome configuration migration
+- Added automatic merging of new biomes into existing user `biomes_data.json` files
+- Added automatic merging of new biomes into existing user `config.json` files for `biome_counts`, `biome_notification_enabled`, and `biome_notifier` sections
+- Ensured BLAZING SUN biome is properly configured with correct notification settings (always notify with ping) for all users
+- Made biome configuration future-proof to automatically handle new biomes in future updates without requiring manual user intervention
+
+## [0.9.6-Beta] - 2025-07-05
 ### Added
 - Added new "BLAZING SUN" biome detection with hover text "BLAZING SUN" and asset ID 107114559110957
 - Implemented automatic Tcl/Tk library path detection to resolve GUI startup issues

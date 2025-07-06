@@ -13,7 +13,7 @@ import ctypes
 from utils import create_tooltip, error_logging 
 
 APP_NAME = "MultiScope"
-APP_VERSION = "0.9.6-Beta"
+APP_VERSION = "0.9.7-Beta"
 MYAPPID = f"{APP_NAME}.App.{APP_VERSION}"
 try:
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(MYAPPID)

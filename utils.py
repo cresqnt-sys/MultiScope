@@ -140,10 +140,60 @@ def load_config(default_biome_data_keys):
     legacy_paths = [
         "config.json",
         "source_code/config.json",
-        os.path.join(os.path.dirname(sys.argv[0]), "config.json"), 
+        os.path.join(os.path.dirname(sys.argv[0]), "config.json"),
         os.path.join(os.path.dirname(sys.argv[0]), "source_code/config.json")
     ]
-    return load_json_data(CONFIG_FILENAME, default_config, legacy_paths)
+
+    config = load_json_data(CONFIG_FILENAME, default_config, legacy_paths)
+
+    # Check if we need to add any new biomes to the config
+    config_updated = False
+
+    # Ensure biome_counts has all biomes
+    if "biome_counts" not in config:
+        config["biome_counts"] = {}
+    for biome in default_biome_data_keys:
+        if biome not in config["biome_counts"]:
+            print(f"Adding new biome '{biome}' to config biome_counts.")
+            config["biome_counts"][biome] = 0
+            config_updated = True
+
+    # Ensure biome_notification_enabled has all biomes (default to True, except special cases)
+    if "biome_notification_enabled" not in config:
+        config["biome_notification_enabled"] = {}
+    for biome in default_biome_data_keys:
+        if biome not in config["biome_notification_enabled"]:
+            # Default notification settings: always on for special biomes, off for NORMAL, on for others
+            if biome in ["GLITCHED", "DREAMSPACE", "BLAZING SUN"]:
+                default_enabled = True
+            elif biome == "NORMAL":
+                default_enabled = False
+            else:
+                default_enabled = True
+            print(f"Adding new biome '{biome}' to config biome_notification_enabled (default: {default_enabled}).")
+            config["biome_notification_enabled"][biome] = default_enabled
+            config_updated = True
+
+    # Ensure biome_notifier has all biomes (default to "Message", except special cases)
+    if "biome_notifier" not in config:
+        config["biome_notifier"] = {}
+    for biome in default_biome_data_keys:
+        if biome not in config["biome_notifier"]:
+            # Default notifier settings: Ping for special biomes, Message for others
+            if biome in ["GLITCHED", "DREAMSPACE", "BLAZING SUN"]:
+                default_notifier = "Ping"
+            else:
+                default_notifier = "Message"
+            print(f"Adding new biome '{biome}' to config biome_notifier (default: {default_notifier}).")
+            config["biome_notifier"][biome] = default_notifier
+            config_updated = True
+
+    # Save the updated config if new biomes were added
+    if config_updated:
+        print("Saving updated config with new biomes.")
+        save_json_data(CONFIG_FILENAME, config)
+
+    return config
 
 def save_config(config_data):
     """Saves the main configuration file."""
@@ -168,6 +218,14 @@ def load_biome_data():
 
     data = load_json_data(BIOMES_DATA_FILENAME, default_data, [BIOMES_DATA_FILENAME])
 
+    # Check if we need to add any new biomes from default_data that are missing in user data
+    data_updated = False
+    for biome, default_info in default_data.items():
+        if biome not in data:
+            print(f"Adding new biome '{biome}' to biome data configuration.")
+            data[biome] = default_info.copy()
+            data_updated = True
+
     # Ensure all biomes have emoji data from default_data
     for biome, info in data.items():
         if biome in default_data and "emoji" not in info:
@@ -182,6 +240,12 @@ def load_biome_data():
                 info["color"] = "0xFFFFFF"
         elif not isinstance(info.get("color"), str) or not info["color"].startswith("0x"):
              info["color"] = "0xFFFFFF"
+
+    # Save the updated data if new biomes were added
+    if data_updated:
+        print("Saving updated biome data with new biomes.")
+        save_json_data(BIOMES_DATA_FILENAME, data)
+
     return data
     
 def load_auras_json():
