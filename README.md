@@ -6,6 +6,7 @@
 [![GitHub issues](https://img.shields.io/github/issues/cresqnt-sys/MultiScope)](https://github.com/cresqnt-sys/MultiScope/issues)
 [![GitHub last commit](https://img.shields.io/github/last-commit/cresqnt-sys/MultiScope)](https://github.com/cresqnt-sys/MultiScope/commits/main)
 [![Discord](https://img.shields.io/badge/Discord-Join%20Chat-7289DA.svg?logo=discord&logoColor=white)](https://discord.gg/6cuCu6ymkX)
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fcresqnt-sys%2FMultiScope.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Fcresqnt-sys%2FMultiScope?ref=badge_shield)
 
 
 > **Short Description:** A Sols RNG Biome Macro made to detect changes across multiple accounts while ensuring no AFK kicks.
@@ -85,6 +86,9 @@ Notable changes to this project are documented in the [CHANGELOG.md](CHANGELOG.m
 ## 📜 License
 
 This project is licensed under the **GNU Affero General Public License v3.0** - see the [LICENSE](LICENSE) file for details.
+
+
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fcresqnt-sys%2FMultiScope.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Fcresqnt-sys%2FMultiScope?ref=badge_large)
 
 ## 🙏 Acknowledgements
 
