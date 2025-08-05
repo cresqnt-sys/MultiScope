@@ -8,7 +8,7 @@
 [![Discord](https://img.shields.io/badge/Discord-Join%20Chat-7289DA.svg?logo=discord&logoColor=white)](https://discord.gg/6cuCu6ymkX)
 [![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fcresqnt-sys%2FMultiScope.svg?type=shield&issueType=license)](https://app.fossa.com/projects/git%2Bgithub.com%2Fcresqnt-sys%2FMultiScope?ref=badge_shield&issueType=license)
 [![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fcresqnt-sys%2FMultiScope.svg?type=shield&issueType=security)](https://app.fossa.com/projects/git%2Bgithub.com%2Fcresqnt-sys%2FMultiScope?ref=badge_shield&issueType=security)
-[![GitHub All Releases](https://img.shields.io/github/downloads/cresqnt-sys/FishScope-macro/total)](https://github.com/cresqnt-sys/FishScope-macro/releases)
+[![GitHub All Releases](https://img.shields.io/github/downloads/cresqnt-sys/MultiScope/total)](https://github.com/cresqnt-sys/MultiScope/releases)
 
 > **Short Description:** A Sols RNG Biome Macro made to detect changes across multiple accounts while ensuring no AFK kicks.
 
