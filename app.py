@@ -25,7 +25,7 @@ except ImportError:
     print("AntiAFK module not found or failed to import. Anti-AFK features disabled.")
     AntiAFK = None
 
-APP_VERSION = "0.9.7-Beta"
+APP_VERSION = "0.9.8-Stable"
 
 class MultiScopeApp:
     def __init__(self, gui_manager_class=None):

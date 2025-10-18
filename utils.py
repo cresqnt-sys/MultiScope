@@ -202,17 +202,20 @@ def save_config(config_data):
 def load_biome_data():
     """Loads biome data. (thanks maxstellar for the images)"""
     default_data = {
-        "WINDY": {"emoji": "🌀", "color": "0xFFFFFF", "thumbnail_url": "https://maxstellar.tech/biome_thumb/WINDY.png"},
-        "RAINY": {"emoji": "🌧️", "color": "0x55925F", "thumbnail_url": "https://maxstellar.tech/biome_thumb/RAINY.png"},
-        "SNOWY": {"emoji": "❄️", "color": "0xFFFFFF", "thumbnail_url": "https://maxstellar.tech/biome_thumb/SNOWY.png"},
-        "SAND STORM": {"emoji": "🏜️", "color": "0xFFA500", "thumbnail_url": "https://maxstellar.tech/biome_thumb/SAND%20STORM.png"},
-        "HELL": {"emoji": "🔥", "color": "0xFB4F29", "thumbnail_url": "https://maxstellar.tech/biome_thumb/HELL.png"},
-        "STARFALL": {"emoji": "🌠", "color": "0xFFFFFF", "thumbnail_url": "https://maxstellar.tech/biome_thumb/STARFALL.png"},
-        "CORRUPTION": {"emoji": "🌑", "color": "0x800080", "thumbnail_url": "https://maxstellar.tech/biome_thumb/CORRUPTION.png"},
-        "NULL": {"emoji": "🌫️", "color": "0x808080", "thumbnail_url": "https://maxstellar.tech/biome_thumb/NULL.png"},
+        "WINDY": {"emoji": "🌀", "color": "0xFFFFFF", "thumbnail_url": "https://maxstellar.github.io/biome_thumb/WINDY.png"},
+        "RAINY": {"emoji": "🌧️", "color": "0x55925F", "thumbnail_url": "https://maxstellar.github.io/biome_thumb/RAINY.png"},
+        "SNOWY": {"emoji": "❄️", "color": "0xFFFFFF", "thumbnail_url": "https://maxstellar.github.io/biome_thumb/SNOWY.png"},
+        "SAND STORM": {"emoji": "🏜️", "color": "0xFFA500", "thumbnail_url": "https://maxstellar.github.io/biome_thumb/SAND%20STORM.png"},
+        "HELL": {"emoji": "🔥", "color": "0xFB4F29", "thumbnail_url": "https://maxstellar.github.io/biome_thumb/HELL.png"},
+        "STARFALL": {"emoji": "🌠", "color": "0xFFFFFF", "thumbnail_url": "https://maxstellar.github.io/biome_thumb/STARFALL.png"},
+        "CORRUPTION": {"emoji": "🌑", "color": "0x800080", "thumbnail_url": "https://maxstellar.github.io/biome_thumb/CORRUPTION.png"},
+        "NULL": {"emoji": "🌫️", "color": "0x808080", "thumbnail_url": "https://maxstellar.github.io/biome_thumb/NULL.png"},
         "GLITCHED": {"emoji": "⚠️", "color": "0xFFFF00", "thumbnail_url": "https://i.postimg.cc/mDzwFfX1/GLITCHED.png"},
-        "DREAMSPACE": {"emoji": "💤", "color": "0xFF00FF", "thumbnail_url": "https://maxstellar.tech/biome_thumb/DREAMSPACE.png"},
+        "DREAMSPACE": {"emoji": "💤", "color": "0xFF00FF", "thumbnail_url": "https://maxstellar.github.io/biome_thumb/DREAMSPACE.png"},
         "BLAZING SUN": {"emoji": "☀️", "color": "0xFFD700", "thumbnail_url": "https://static.wikia.nocookie.net/fcs-vs-battle/images/2/2c/Annoying_Dog_Render.png/revision/latest/scale-to-width-down/340?cb=20180730225500"},
+        "BLOOD RAIN": {"emoji": "🩸", "color": "0x8B0000", "thumbnail_url": "https://maxstellar.github.io/biome_thumb/BLOOD%20RAIN.png"},
+        "PUMPKIN MOON": {"emoji": "🎃", "color": "0xFF8C00", "thumbnail_url": "https://maxstellar.github.io/biome_thumb/PUMPKIN%20MOON.png"},
+        "GRAVEYARD": {"emoji": "🪦", "color": "0x4B0082", "thumbnail_url": "https://maxstellar.github.io/biome_thumb/GRAVEYARD.png"},
         "NORMAL": {"emoji": "🌳", "color": "0x00FF00", "thumbnail_url": ""}
     }
 

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.8-Stable] - 2025-10-18
+### Added
+- Added new biomes: BLOOD RAIN, PUMPKIN MOON, GRAVEYARD
+
+### Changed
+- Updated biome thumbnail URLs
+- Updated app version to 0.9.8-Stable
+
 ## [0.9.7-Beta] - 2025-07-06
 ### Fixed
 - Fixed BLAZING SUN biome detection issues for existing users by implementing automatic biome configuration migration
