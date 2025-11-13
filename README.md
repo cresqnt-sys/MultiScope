@@ -16,7 +16,7 @@
 
 **MultiScope** is a Python application designed to track Biome Changes in Sols RNG across multiple accounts. | Formerly BiomeScope
 
-## ✨ Features
+## Features
 
 *   **Multi-Account Management:** Configure and track multiple accounts.
 *   **Biome/Event Detection:** Automatically detects biomes with sub second delays.
@@ -27,7 +27,7 @@
 *   **Configuration:** Saves settings, accounts, and logs.
 *   **Update Checker:** Checks for new versions on startup.
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 
@@ -68,7 +68,7 @@ Note: The precompiled executable includes all necessary dependencies and does no
 python main.py 
 ```
 
-## 🔧 Usage
+## Usage
 
 
 1.  Launch the application using `python main.py`.
@@ -80,22 +80,22 @@ python main.py
 7.  Press F2 (or the 'Stop' button) to stop detection.
 8.  Monitor logs and stats in the 'Stats & Logs' tab.
 
-## 📄 Changelog
+## Changelog
 
 Notable changes to this project are documented in the [CHANGELOG.md](CHANGELOG.md) file. The current version is **0.9.6-Beta**.
 
-## 📜 License
+## License
 
 This project is licensed under the **GNU Affero General Public License v3.0** - see the [LICENSE](LICENSE) file for details.
 
-## 🙏 Acknowledgements
+## Acknowledgements
 
 *   **Created by:** cresqnt & Bored Man
-*   **Original Inspiration:** Maxsteller
+*   **Original Inspiration:** Maxstellar
 
-## 📞 Contact
+## Contact
 
 *   **Discord Server:** [Join the MultiScope Discord](https://discord.gg/6cuCu6ymkX)
 *   **GitHub Repository:** [https://github.com/cresqnt-sys/MultiScope](https://github.com/cresqnt-sys/MultiScope)
 
-⭐ If you find MultiScope useful, please consider starring the repository on GitHub! ⭐
+If you find MultiScope useful, please consider starring the repository on GitHub
