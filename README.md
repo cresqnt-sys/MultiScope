@@ -82,7 +82,7 @@ python main.py
 
 ## Changelog
 
-Notable changes to this project are documented in the [CHANGELOG.md](CHANGELOG.md) file. The current version is **0.9.6-Beta**.
+Notable changes to this project are documented in the [CHANGELOG.md](CHANGELOG.md) file. The current version is **0.9.8-Stable**.
 
 ## License
 
