@@ -418,7 +418,7 @@ class GuiManager:
         ttk.Label(frame, text="A Sols RNG Biome & Multi-Account Tracker.", wraplength=400).pack(pady=10)
 
         credits_frame = ttk.LabelFrame(frame, text="Credits", padding=10); credits_frame.pack(fill="x", pady=10)
-        ttk.Label(credits_frame, text="Created by: cresqnt (Patch fix by Manas, join discord.gg/oppression)", font=("Arial", 10, "bold")).pack(anchor="w", padx=10, pady=5)
+        ttk.Label(credits_frame, text="Created by: cresqnt", font=("Arial", 10, "bold")).pack(anchor="w", padx=10, pady=5)
         ttk.Label(credits_frame, text="Contributors & Inspirations:", font=("Arial", 10, "bold")).pack(anchor="w", padx=10, pady=(10, 0))
         contributors = ["Maxsteller (Original Inspiration)", "Bored Man (Biome Detection Rewrite)"]
         for c in contributors: ttk.Label(credits_frame, text=f"• {c}").pack(anchor="w", padx=30, pady=2)
