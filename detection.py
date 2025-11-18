@@ -211,7 +211,9 @@ class DetectionManager:
             try:
                 with open(log_path,"r", encoding='utf-8', errors='ignore') as file:
                     path_content = file.read(LOG_READ_SIZE)
-                username_match = re.search(r"load failed in Players\.([^.]+)\.", path_content)
+
+                username_match = re.search(r"Players\.([^.]+)\.PlayerGui", path_content)
+
                 if username_match:
                     username = username_match.group(1)
                     self.app.append_log(f"Debug: Extracted username '{username}' from {log_path}") 
