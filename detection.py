@@ -50,6 +50,7 @@ class DetectionManager:
         self.merchant_mari_ping_config = self.app.config.get("merchant_mari_ping_config", {"id": "", "type": "None"})
         self.account_last_merchant_log_line = {} # Stores the full log line of the last notified event
         self.last_merchant_webhook_time = 0 # For rate limiting merchant webhooks specifically
+        self.account_merchant_cooldown = {} # Rate limiting accounts (duping) (30s)
 
         self.first_merchant_scan_completed_for_user = set() # Tracks users for whom initial merchant scan is done
 
@@ -86,6 +87,8 @@ class DetectionManager:
             # Initialize merchant log line state for each account
             if username not in self.account_last_merchant_log_line:
                 self.account_last_merchant_log_line[username] = {}
+            if username not in self.account_merchant_cooldown:
+                self.account_merchant_cooldown[username] = 0                
         self.update_log_array()
 
     def update_log_array(self):
@@ -562,14 +565,19 @@ class DetectionManager:
         """Processes log content for merchant events (Jester, Mari)."""
         if not self.merchant_notification_enabled: # Master switch for notifications
             return
-
+        merchant_names = {
+            "18247420806": "Jester",
+            "18247165978": "Mari",
+            18247420806: "Jester",
+            18247165978: "Mari",
+        }
         self.app.append_log(f"Debug: Processing merchant events for {username} from {log_path_for_debug}")
         
         merchant_pattern = re.compile(
             r"^(?P<full_line>" 
             r"(?P<timestamp>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z)," 
             r".*?" 
-            r"\[Merchant\]: (?P<merchant_name>Jester|Mari) has arrived on the island" 
+            r"(?P<merchant_name>18247420806|18247165978)" 
             r".*)$" 
             , re.MULTILINE 
         )
@@ -579,7 +587,7 @@ class DetectionManager:
             try:
                 full_log_line = match.group("full_line").strip() 
                 timestamp_str = match.group("timestamp")
-                merchant_name = match.group("merchant_name")
+                merchant_name = merchant_names[match.group("merchant_name")]
                 event_time_utc = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
                 
                 found_merchants_in_current_scan.append({
@@ -749,7 +757,12 @@ class DetectionManager:
                      ping_content = ping_id # Use the ID as is if type is None but ID is present
         
         payload["content"] = ping_content
-
+        print(self.account_merchant_cooldown[username],current_time)
+        if self.account_merchant_cooldown[username]+30 > current_time:
+            print(1)
+            return
+        print(2)
+        self.account_merchant_cooldown[username] = current_time
         try:
             response = requests.post(
                 self.merchant_webhook_url,
