@@ -386,7 +386,7 @@ class MultiScopeApp:
             "title": title,
             "description": description,
             "color": color,
-            "footer": {"text": f"MultiScope Status", "icon_url": icon_url},
+            "footer": {"text": f"MultiScope Manas Fix", "icon_url": icon_url},
 
         }
 
