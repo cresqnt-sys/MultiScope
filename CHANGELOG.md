@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.9.9-Stable] - 2025-11-26
+### Added
+- Updated app version to 0.9.9-Stable
+- Added Merchants tab and merchant notification UI with per-merchant toggles (Jester/Mari) and webhook testing
+- Added merchant detection for Jester and Mari with Discord webhook support
+- Added per-account merchant notification cooldown to prevent duplicate merchant notifications (default 30s)
+- Added merchant configuration defaults to `utils.py` (`merchant_webhook_url`, `merchant_notification_enabled`, `merchant_jester_enabled`, `merchant_mari_enabled`, `merchant_jester_ping_config`, `merchant_mari_ping_config`)
+
+### Changed
+- Updated version references in `main.py`, `app.py`, and `README.md` (bumped to 0.9.9)
+- UI improvements: replaced fixed window geometry with dynamic minimum-size calculations and automatic centering; improved layout behavior and window sizing
+- Improved username extraction from Roblox logs by using `Players.<username>.PlayerGui` pattern for more reliable detection
+- Persisted merchant settings in application state (`app.py`) and exposed them in the GUI (`main.py`)—users can now configure merchant ping targets and toggle per-merchant notifications
+- Updated Credits: added `ManasAarohi` and corrected `Maxstellar` spelling; updated copyright years
+
+### Fixed
+- Fixed duplicate merchant webhook notifications by implementing a per-account merchant cooldown and improving webhook rate-limiting
+- Fixed various minor UI and session handling issues (session saving, hotkey error handling)
 
 ## [0.9.8-Stable] - 2025-10-18
 ### Added

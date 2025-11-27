@@ -50,6 +50,7 @@ class DetectionManager:
         self.merchant_mari_ping_config = self.app.config.get("merchant_mari_ping_config", {"id": "", "type": "None"})
         self.account_last_merchant_log_line = {} # Stores the full log line of the last notified event
         self.last_merchant_webhook_time = 0 # For rate limiting merchant webhooks specifically
+        self.account_merchant_cooldown = {} # Per-account cooldown to prevent duplicate notifications (30s)
 
         self.first_merchant_scan_completed_for_user = set() # Tracks users for whom initial merchant scan is done
 
@@ -86,6 +87,8 @@ class DetectionManager:
             # Initialize merchant log line state for each account
             if username not in self.account_last_merchant_log_line:
                 self.account_last_merchant_log_line[username] = {}
+            if username not in self.account_merchant_cooldown:
+                self.account_merchant_cooldown[username] = 0
         self.update_log_array()
 
     def update_log_array(self):
@@ -211,7 +214,8 @@ class DetectionManager:
             try:
                 with open(log_path,"r", encoding='utf-8', errors='ignore') as file:
                     path_content = file.read(LOG_READ_SIZE)
-                username_match = re.search(r"load failed in Players\.([^.]+)\.", path_content)
+                # Updated pattern to use PlayerGui reference for more reliable username extraction
+                username_match = re.search(r"Players\.([^.]+)\.PlayerGui", path_content)
                 if username_match:
                     username = username_match.group(1)
                     self.app.append_log(f"Debug: Extracted username '{username}' from {log_path}") 
@@ -747,6 +751,13 @@ class DetectionManager:
                      ping_content = ping_id # Use the ID as is if type is None but ID is present
         
         payload["content"] = ping_content
+
+        # Per-account cooldown check (30 seconds) to prevent duplicate notifications
+        if username in self.account_merchant_cooldown:
+            if self.account_merchant_cooldown[username] + 30 > current_time:
+                self.app.append_log(f"Debug: Merchant notification for {username} skipped due to cooldown.")
+                return
+        self.account_merchant_cooldown[username] = current_time
 
         try:
             response = requests.post(

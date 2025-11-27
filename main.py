@@ -13,7 +13,7 @@ import ctypes
 from utils import create_tooltip, error_logging 
 
 APP_NAME = "MultiScope"
-APP_VERSION = "0.9.8-Stable"
+APP_VERSION = "0.9.9-Stable"
 MYAPPID = f"{APP_NAME}.App.{APP_VERSION}"
 try:
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(MYAPPID)
@@ -80,7 +80,6 @@ class GuiManager:
                  print(f"Failed to set AppUserModelID or icon: {e}")
 
         self.root.title(f"MultiScope | Version {self.app.version}")
-        self.root.geometry("735x530")
         self.root.resizable(True, True)
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
@@ -124,6 +123,17 @@ class GuiManager:
         self.update_detection_buttons()
         self.update_status("Ready", "grey")
         self.root.after(1500, self.app.check_for_updates_on_startup)
+        self.root.update_idletasks()
+        req_width = self.root.winfo_reqwidth()
+        req_height = self.root.winfo_reqheight()
+        min_width = max(735, req_width)
+        min_height = max(530, req_height)
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        x = (screen_width - min_width) // 2
+        y = (screen_height - min_height) // 2
+        self.root.geometry(f"{min_width}x{min_height}+{x}+{y}")
+        self.root.minsize(min_width, min_height)
 
     def run(self):
         """Starts the Tkinter main loop."""
@@ -420,7 +430,7 @@ class GuiManager:
         credits_frame = ttk.LabelFrame(frame, text="Credits", padding=10); credits_frame.pack(fill="x", pady=10)
         ttk.Label(credits_frame, text="Created by: cresqnt", font=("Arial", 10, "bold")).pack(anchor="w", padx=10, pady=5)
         ttk.Label(credits_frame, text="Contributors & Inspirations:", font=("Arial", 10, "bold")).pack(anchor="w", padx=10, pady=(10, 0))
-        contributors = ["Maxsteller (Original Inspiration)", "Bored Man (Biome Detection Rewrite)"]
+        contributors = ["Maxstellar (Original Inspiration)", "Bored Man (Biome Detection Rewrite)", "ManasAarohi (New Player Name Detection Method)"]
         for c in contributors: ttk.Label(credits_frame, text=f"• {c}").pack(anchor="w", padx=30, pady=2)
 
         support_frame = ttk.LabelFrame(frame, text="Support & Links", padding=10); support_frame.pack(fill="x", pady=10)
@@ -430,7 +440,7 @@ class GuiManager:
         gh_label.pack(anchor="w", padx=10, pady=5); gh_label.bind("<Button-1>", lambda e: webbrowser.open("https://github.com/cresqnt-sys/MultiScope")); create_tooltip(gh_label, "View Source")
         scope_dev_label = ttk.Label(support_frame, text="Scope Development Website: scopedevelopment.tech", cursor="hand2", foreground="#007bff")
         scope_dev_label.pack(anchor="w", padx=10, pady=5); scope_dev_label.bind("<Button-1>", lambda e: webbrowser.open("https://scopedevelopment.tech")); create_tooltip(scope_dev_label, "Visit Scope Development")
-        ttk.Label(frame, text="© 2024 cresqnt. All rights reserved.").pack(side="bottom", pady=(10, 5), anchor='s')
+        ttk.Label(frame, text="© 2024-2025 cresqnt. All rights reserved.").pack(side="bottom", pady=(10, 5), anchor='s')
 
     def show_message_box(self, title, message, msg_type="info"):
         """Shows a standard message box."""
