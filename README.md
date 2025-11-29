@@ -1,7 +1,6 @@
 # <img src="biomescope.ico" alt="Project Logo" width="40" style="vertical-align: middle;"/>&nbsp;MultiScope
 
 
-[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 [![GitHub stars](https://img.shields.io/github/stars/cresqnt-sys/MultiScope?style=social)](https://github.com/cresqnt-sys/MultiScope/stargazers)
 [![GitHub issues](https://img.shields.io/github/issues/cresqnt-sys/MultiScope)](https://github.com/cresqnt-sys/MultiScope/issues)
 [![GitHub last commit](https://img.shields.io/github/last-commit/cresqnt-sys/MultiScope)](https://github.com/cresqnt-sys/MultiScope/commits/main)
@@ -86,7 +85,7 @@ Notable changes to this project are documented in the [CHANGELOG.md](CHANGELOG.m
 
 ## License
 
-This project is licensed under the **GNU Affero General Public License v3.0** - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the **Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 International** - see the [LICENSE](LICENSE) file for details.
 
 ## Acknowledgements
 
