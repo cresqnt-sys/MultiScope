@@ -5,9 +5,8 @@
 [![GitHub issues](https://img.shields.io/github/issues/cresqnt-sys/MultiScope)](https://github.com/cresqnt-sys/MultiScope/issues)
 [![GitHub last commit](https://img.shields.io/github/last-commit/cresqnt-sys/MultiScope)](https://github.com/cresqnt-sys/MultiScope/commits/main)
 [![Discord](https://img.shields.io/badge/Discord-Join%20Chat-7289DA.svg?logo=discord&logoColor=white)](https://discord.gg/6cuCu6ymkX)
-[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fcresqnt-sys%2FMultiScope.svg?type=shield&issueType=license)](https://app.fossa.com/projects/git%2Bgithub.com%2Fcresqnt-sys%2FMultiScope?ref=badge_shield&issueType=license)
-[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fcresqnt-sys%2FMultiScope.svg?type=shield&issueType=security)](https://app.fossa.com/projects/git%2Bgithub.com%2Fcresqnt-sys%2FMultiScope?ref=badge_shield&issueType=security)
 [![GitHub All Releases](https://img.shields.io/github/downloads/cresqnt-sys/MultiScope/total)](https://github.com/cresqnt-sys/MultiScope/releases)
+![Static Badge](https://img.shields.io/badge/license-CC_BY--NC--ND_4.0-orange)
 
 > **Short Description:** A Sols RNG Biome Macro made to detect changes across multiple accounts while ensuring no AFK kicks.
 

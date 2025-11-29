@@ -13,7 +13,7 @@ import ctypes
 from utils import create_tooltip, error_logging 
 
 APP_NAME = "MultiScope"
-APP_VERSION = "0.9.9-Stable"
+APP_VERSION = "0.9.9.1-Stable"
 MYAPPID = f"{APP_NAME}.App.{APP_VERSION}"
 try:
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(MYAPPID)
@@ -471,26 +471,33 @@ class GuiManager:
         bv = {}; cfg = self.app.config.get("biome_notification_enabled", {})
         for b in sorted(self.app.biome_data.keys()):
              f = ttk.Frame(cba); f.pack(fill='x', pady=2, padx=5)
-             aen = b in ["GLITCHED", "DREAMSPACE", "BLAZING SUN"]
-             always_off = b == "NORMAL"
-             iv = True if aen else (False if always_off else cfg.get(b, True))
+             biome_info = self.app.biome_data.get(b, {})
+             force_notify = biome_info.get("force_notify", False)
+             never_notify = biome_info.get("never_notify", False)
+             iv = True if force_notify else (False if never_notify else cfg.get(b, True))
              var = tk.BooleanVar(value=iv)
-             cb = ttk.Checkbutton(f, text=b, variable=var, state="disabled" if aen or always_off else "normal")
+             cb = ttk.Checkbutton(f, text=b, variable=var, state="disabled" if force_notify or never_notify else "normal")
              cb.pack(side='left')
              bv[b] = var
-             if aen: ttk.Label(f, text="(Always Notify)", foreground="green").pack(side='right', padx=5)
-             elif always_off: ttk.Label(f, text="(Never Notify)", foreground="red").pack(side='right', padx=5)
+             if force_notify: ttk.Label(f, text="(Always Notify)", foreground="green").pack(side='right', padx=5)
+             elif never_notify: ttk.Label(f, text="(Never Notify)", foreground="red").pack(side='right', padx=5)
         bf = ttk.Frame(win, padding=(0, 10)); bf.pack(fill='x')
         def svs():
             ns = {b: v.get() for b, v in bv.items()}
-            ns["GLITCHED"] = ns["DREAMSPACE"] = ns["BLAZING SUN"] = True
-            ns["NORMAL"] = False
+            # Enforce force_notify and never_notify from biome data
+            for biome_name, biome_info in self.app.biome_data.items():
+                if biome_info.get("force_notify", False):
+                    ns[biome_name] = True
+                elif biome_info.get("never_notify", False):
+                    ns[biome_name] = False
             self.app.config["biome_notification_enabled"] = ns
             self.app.config_changed = True
             win.destroy()
             self.show_message_box("Success", "Settings saved!", "info")
-        def sa(): [v.set(True) for b, v in bv.items() if b not in ["GLITCHED", "DREAMSPACE", "BLAZING SUN", "NORMAL"]]
-        def sn(): [v.set(False) for b, v in bv.items() if b not in ["GLITCHED", "DREAMSPACE", "BLAZING SUN"]]
+        # Get biomes that aren't force_notify or never_notify for select all/none
+        toggleable_biomes = [b for b in bv.keys() if not self.app.biome_data.get(b, {}).get("force_notify", False) and not self.app.biome_data.get(b, {}).get("never_notify", False)]
+        def sa(): [v.set(True) for b, v in bv.items() if b in toggleable_biomes]
+        def sn(): [v.set(False) for b, v in bv.items() if b in toggleable_biomes]
         ttk.Button(bf, text="Save", command=svs, style="success.TButton", width=10).pack(side='right', padx=5)
         ttk.Button(bf, text="Cancel", command=win.destroy, style="danger.TButton", width=10).pack(side='right', padx=5)
         ttk.Button(bf, text="Select All", command=sa, style="info.TButton", width=10).pack(side='left', padx=5)

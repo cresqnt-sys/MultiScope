@@ -163,13 +163,9 @@ def load_config(default_biome_data_keys):
         config["biome_notification_enabled"] = {}
     for biome in default_biome_data_keys:
         if biome not in config["biome_notification_enabled"]:
-            # Default notification settings: always on for special biomes, off for NORMAL, on for others
-            if biome in ["GLITCHED", "DREAMSPACE", "BLAZING SUN"]:
-                default_enabled = True
-            elif biome == "NORMAL":
-                default_enabled = False
-            else:
-                default_enabled = True
+            # Default notification settings based on biome data
+            # Biomes with never_notify=true default to off, others default to on
+            default_enabled = True
             print(f"Adding new biome '{biome}' to config biome_notification_enabled (default: {default_enabled}).")
             config["biome_notification_enabled"][biome] = default_enabled
             config_updated = True
@@ -179,11 +175,8 @@ def load_config(default_biome_data_keys):
         config["biome_notifier"] = {}
     for biome in default_biome_data_keys:
         if biome not in config["biome_notifier"]:
-            # Default notifier settings: Ping for special biomes, Message for others
-            if biome in ["GLITCHED", "DREAMSPACE", "BLAZING SUN"]:
-                default_notifier = "Ping"
-            else:
-                default_notifier = "Message"
+            # Default notifier settings: Message for all (ping_everyone is handled separately via biome data)
+            default_notifier = "Message"
             print(f"Adding new biome '{biome}' to config biome_notifier (default: {default_notifier}).")
             config["biome_notifier"][biome] = default_notifier
             config_updated = True
@@ -199,9 +192,42 @@ def save_config(config_data):
     """Saves the main configuration file."""
     save_json_data(CONFIG_FILENAME, config_data)
 
+BIOMES_REMOTE_URL = "https://raw.githubusercontent.com/cresqnt-sys/MultiScope/refs/heads/main/assets/biomes.json"
+
+def _get_assets_biomes_path():
+    """Get the path to the biomes.json file in the assets folder."""
+    # Try to find assets/biomes.json relative to the script or in PyInstaller bundle
+    try:
+        # For PyInstaller bundled app
+        base_path = sys._MEIPASS
+    except AttributeError:
+        # For development - use the script's directory
+        base_path = os.path.dirname(os.path.abspath(__file__))
+    
+    return os.path.join(base_path, "assets", "biomes.json")
+
+def _fetch_remote_biomes():
+    """Fetch biomes data from the remote GitHub URL."""
+    try:
+        response = requests.get(BIOMES_REMOTE_URL, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        print(f"Fetched {len(data)} biomes from remote URL")
+        return data
+    except requests.exceptions.RequestException as e:
+        print(f"Failed to fetch remote biomes: {e}")
+        return None
+    except json.JSONDecodeError as e:
+        print(f"Failed to parse remote biomes JSON: {e}")
+        return None
+    except Exception as e:
+        error_logging(e, "Error fetching remote biomes")
+        return None
+
 def load_biome_data():
-    """Loads biome data. (thanks maxstellar for the images)"""
-    default_data = {
+    """Loads biome data. Fetches from remote GitHub URL first, falls back to local assets/biomes.json, then hardcoded defaults."""
+    # Hardcoded fallback defaults (minimal set in case all else fails)
+    fallback_defaults = {
         "WINDY": {"emoji": "🌀", "color": "0xFFFFFF", "thumbnail_url": "https://maxstellar.github.io/biome_thumb/WINDY.png"},
         "RAINY": {"emoji": "🌧️", "color": "0x55925F", "thumbnail_url": "https://maxstellar.github.io/biome_thumb/RAINY.png"},
         "SNOWY": {"emoji": "❄️", "color": "0xFFFFFF", "thumbnail_url": "https://maxstellar.github.io/biome_thumb/SNOWY.png"},
@@ -210,43 +236,94 @@ def load_biome_data():
         "STARFALL": {"emoji": "🌠", "color": "0xFFFFFF", "thumbnail_url": "https://maxstellar.github.io/biome_thumb/STARFALL.png"},
         "CORRUPTION": {"emoji": "🌑", "color": "0x800080", "thumbnail_url": "https://maxstellar.github.io/biome_thumb/CORRUPTION.png"},
         "NULL": {"emoji": "🌫️", "color": "0x808080", "thumbnail_url": "https://maxstellar.github.io/biome_thumb/NULL.png"},
-        "GLITCHED": {"emoji": "⚠️", "color": "0xFFFF00", "thumbnail_url": "https://i.postimg.cc/mDzwFfX1/GLITCHED.png"},
-        "DREAMSPACE": {"emoji": "💤", "color": "0xFF00FF", "thumbnail_url": "https://maxstellar.github.io/biome_thumb/DREAMSPACE.png"},
-        "BLAZING SUN": {"emoji": "☀️", "color": "0xFFD700", "thumbnail_url": "https://static.wikia.nocookie.net/fcs-vs-battle/images/2/2c/Annoying_Dog_Render.png/revision/latest/scale-to-width-down/340?cb=20180730225500"},
-        "BLOOD RAIN": {"emoji": "🩸", "color": "0x8B0000", "thumbnail_url": "https://maxstellar.github.io/biome_thumb/BLOOD%20RAIN.png"},
-        "PUMPKIN MOON": {"emoji": "🎃", "color": "0xFF8C00", "thumbnail_url": "https://maxstellar.github.io/biome_thumb/PUMPKIN%20MOON.png"},
-        "GRAVEYARD": {"emoji": "🪦", "color": "0x4B0082", "thumbnail_url": "https://maxstellar.github.io/biome_thumb/GRAVEYARD.png"},
-        "NORMAL": {"emoji": "🌳", "color": "0x00FF00", "thumbnail_url": ""}
+        "GLITCHED": {"emoji": "⚠️", "color": "0xFFFF00", "thumbnail_url": "https://i.postimg.cc/mDzwFfX1/GLITCHED.png", "force_notify": True, "ping_everyone": True},
+        "DREAMSPACE": {"emoji": "💤", "color": "0xFF00FF", "thumbnail_url": "https://maxstellar.github.io/biome_thumb/DREAMSPACE.png", "force_notify": True, "ping_everyone": True},
+        "CYBERSPACE": {"emoji": "🤖", "color": "0x00FFFF", "thumbnail_url": "https://raw.githubusercontent.com/cresqnt-sys/MultiScope/refs/heads/main/assets/cyberspace.png"},
+        "NORMAL": {"emoji": "🌳", "color": "0x00FF00", "thumbnail_url": "", "never_notify": True}
     }
-
-    data = load_json_data(BIOMES_DATA_FILENAME, default_data, [BIOMES_DATA_FILENAME])
-
-    # Check if we need to add any new biomes from default_data that are missing in user data
-    data_updated = False
-    for biome, default_info in default_data.items():
-        if biome not in data:
-            print(f"Adding new biome '{biome}' to biome data configuration.")
-            data[biome] = default_info.copy()
-            data_updated = True
-
-    # Ensure all biomes have emoji data from default_data
+    
+    # Try to fetch from remote URL first (allows auto-updating biomes without app update)
+    remote_data = _fetch_remote_biomes()
+    
+    # Try to load from local assets/biomes.json as fallback
+    assets_biomes_path = _get_assets_biomes_path()
+    local_data = {}
+    
+    if os.path.exists(assets_biomes_path):
+        try:
+            with open(assets_biomes_path, "r", encoding='utf-8') as f:
+                local_data = json.load(f)
+            print(f"Loaded {len(local_data)} biomes from local assets/biomes.json")
+        except json.JSONDecodeError as e:
+            error_logging(e, f"Error parsing local assets/biomes.json.")
+            local_data = {}
+        except Exception as e:
+            error_logging(e, f"Error reading local assets/biomes.json.")
+            local_data = {}
+    
+    # Priority: remote > local > fallback defaults
+    # Start with fallback defaults
+    data = fallback_defaults.copy()
+    
+    # Override with local data if available
+    for biome, info in local_data.items():
+        if biome.startswith("_"):  # Skip comment keys
+            continue
+        data[biome] = info.copy()
+    
+    # Override with remote data if available (highest priority)
+    if remote_data:
+        for biome, info in remote_data.items():
+            if biome.startswith("_"):  # Skip comment keys
+                continue
+            data[biome] = info.copy()
+    
+    # Also load user's AppData biomes_data.json to preserve any user stats/customizations
+    appdata_biomes = load_json_data(BIOMES_DATA_FILENAME, {}, [BIOMES_DATA_FILENAME])
+    
+    # Merge AppData customizations (but assets/biomes.json defines the available biomes)
+    # This preserves user's color customizations if they've modified them
+    appdata_updated = False
     for biome, info in data.items():
-        if biome in default_data and "emoji" not in info:
-            info["emoji"] = default_data[biome].get("emoji", "🌍")
-        elif "emoji" not in info:
+        if biome not in appdata_biomes:
+            print(f"Adding new biome '{biome}' to user's biome data configuration.")
+            appdata_biomes[biome] = info.copy()
+            appdata_updated = True
+    
+    # Update data with any user customizations from AppData
+    for biome, info in appdata_biomes.items():
+        if biome in data:
+            # User may have customized some fields, merge them
+            for key in ["emoji", "color", "thumbnail_url"]:
+                if key in info and info[key]:
+                    data[biome][key] = info[key]
+
+    # Ensure all biomes have required fields with proper formatting
+    for biome, info in data.items():
+        # Ensure emoji exists
+        if "emoji" not in info or not info["emoji"]:
             info["emoji"] = "🌍"  # Default emoji for unknown biomes
 
-        if isinstance(info.get("color"), (int, str)) and not info["color"].startswith("0x"):
-            try:
-                info["color"] = f"0x{int(info['color']):06X}"
-            except (ValueError, TypeError):
-                info["color"] = "0xFFFFFF"
-        elif not isinstance(info.get("color"), str) or not info["color"].startswith("0x"):
-             info["color"] = "0xFFFFFF"
+        # Ensure color is properly formatted
+        color = info.get("color", "0xFFFFFF")
+        if isinstance(color, str):
+            if not color.startswith("0x"):
+                try:
+                    info["color"] = f"0x{int(color):06X}"
+                except (ValueError, TypeError):
+                    info["color"] = "0xFFFFFF"
+        elif isinstance(color, int):
+            info["color"] = f"0x{color:06X}"
+        else:
+            info["color"] = "0xFFFFFF"
+        
+        # Ensure thumbnail_url exists
+        if "thumbnail_url" not in info:
+            info["thumbnail_url"] = ""
 
-    # Save the updated data if new biomes were added
-    if data_updated:
-        print("Saving updated biome data with new biomes.")
+    # Save the updated data to AppData if new biomes were added
+    if appdata_updated:
+        print("Saving updated biome data to AppData with new biomes.")
         save_json_data(BIOMES_DATA_FILENAME, data)
 
     return data

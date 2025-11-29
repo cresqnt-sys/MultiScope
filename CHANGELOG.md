@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [0.9.9.1-Stable] - 2025-11-29
+### Added
+- Added new CYBERSPACE biome with dedicated icon
+- Added external `assets/biomes.json` configuration file for remote biome updating
+- Added remote biome fetching from GitHub - biomes now auto-update on app restart without requiring a full app update
+- Added `force_notify` field to biomes.json - biomes with this set to `true` cannot have notifications disabled
+- Added `ping_everyone` field to biomes.json - biomes with this set to `true` will use @everyone ping
+- Added `never_notify` field to biomes.json - biomes with this set to `true` will never send notifications (like NORMAL)
+
+### Changed
+- Detection logic now uses biome data fields for notification behavior instead of hardcoded checks
+- Biome loading priority: Remote GitHub URL > Local assets/biomes.json > Hardcoded fallback defaults
+- Updated [LICENSE](https://github.com/cresqnt-sys/MultiScope/blob/main/LICENSE), if you work on MultiScope currently you are highly encouraged to view changes.
+
+### Removed
+- Removed BLOOD RAIN, PUMPKIN MOON, GRAVEYARD, and BLAZING SUN biomes (no longer in game)
+- Removed hardcoded special biome lists (`["GLITCHED", "DREAMSPACE", "BLAZING SUN"]`) - now configured via biomes.json
+
 ## [0.9.9-Stable] - 2025-11-26
 ### Added
 - Updated app version to 0.9.9-Stable

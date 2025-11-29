@@ -333,10 +333,13 @@ class DetectionManager:
         message_type = self.app.config.get("biome_notifier", {}).get(biome, "Message")
         notification_enabled = self.app.config.get("biome_notification_enabled", {}).get(biome, True)
 
-        if biome in ["GLITCHED", "DREAMSPACE", "BLAZING SUN"]:
-            message_type = "Ping"
+        # Check biome data for force_notify, never_notify, and ping_everyone flags
+        biome_info = self.biome_data.get(biome, {})
+        if biome_info.get("force_notify", False):
             notification_enabled = True
-        elif biome == "NORMAL":
+            if biome_info.get("ping_everyone", False):
+                message_type = "Ping"
+        elif biome_info.get("never_notify", False):
             notification_enabled = False
 
         webhook_tasks = []
@@ -344,10 +347,11 @@ class DetectionManager:
         if previous_biome and previous_biome in self.biome_data:
             prev_message_type = self.app.config.get("biome_notifier", {}).get(previous_biome, "Message")
             prev_notification_enabled = self.app.config.get("biome_notification_enabled", {}).get(previous_biome, True)
-            if previous_biome in ["GLITCHED", "DREAMSPACE", "BLAZING SUN"]:
+            prev_biome_info = self.biome_data.get(previous_biome, {})
+            if prev_biome_info.get("force_notify", False):
                 prev_message_type = "Message"
                 prev_notification_enabled = True
-            elif previous_biome == "NORMAL":
+            elif prev_biome_info.get("never_notify", False):
                 prev_notification_enabled = False
 
             if prev_message_type != "None" and prev_notification_enabled:
